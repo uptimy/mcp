@@ -1,0 +1,128 @@
+# build-and-deploy.yml
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - "master"
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "commit / branch [5eb6c5e/master]"
+        required: false
+
+permissions:
+  contents: read
+  # Needed to push the mirror images to ghcr.io (homelab migration,
+  # upti.my-infrastructure/Migration.md).
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    name: Build and Deploy
+    steps:
+      - name: Notify Slack of Build
+        id: slack-build
+        uses: slackapi/slack-github-action@v4
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            text: "Build started: ${{ github.repository }}"
+            attachments:
+              - color: "#0037FF"
+                text: "*Build STARTING*\n- Actor: ${{ github.actor }}\n- Job Tag: ${{ github.sha }}\n- Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Condition for commit if empty
+        if: "github.event.inputs.commit == ''"
+        run: |
+          echo "commit=master" >> $GITHUB_ENV
+
+      - name: Condition for commit if set
+        if: "github.event.inputs.commit != ''"
+        run: |
+          echo "commit=${{ github.event.inputs.commit }}" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.commit }}
+          fetch-depth: 0
+
+      # The image is tagged with the commit that was checked out, which for a
+      # manual run with the `commit` input is not the workflow's own SHA.
+      - name: Get short sha
+        id: short-sha
+        run: echo "sha=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build images
+        run: |
+          docker build -t uptimy/upti.my-mcp --build-arg VERSION=${{ steps.short-sha.outputs.sha }} . -f Dockerfile
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images to GHCR
+        run: |
+          docker tag uptimy/upti.my-mcp ghcr.io/uptimy/upti.my-mcp:${{ steps.short-sha.outputs.sha }}
+          docker tag uptimy/upti.my-mcp ghcr.io/uptimy/upti.my-mcp:latest
+          docker push ghcr.io/uptimy/upti.my-mcp:${{ steps.short-sha.outputs.sha }}
+          docker push ghcr.io/uptimy/upti.my-mcp:latest
+
+      - name: Checkout homelab repo
+        uses: actions/checkout@v7
+        with:
+          repository: AjdinHalac/homelab
+          token: ${{ secrets.HOMELAB_REPO_TOKEN }}
+          path: homelab
+
+      - name: Bump image tags for Argo CD
+        run: |
+          export SHA=${{ steps.short-sha.outputs.sha }}
+          cd homelab
+          sed -i "s/newTag: .*/newTag: \"${SHA}\"/" apps/uptimy/mcp/base/kustomization.yaml
+          export COMMIT_MSG="deploy(mcp): ${SHA}"
+          git config user.name "uptimy-ci"
+          git config user.email "ci@upti.my"
+          git add apps/uptimy
+          git commit -m "$COMMIT_MSG"
+          # Concurrent service builds race to push here; rebase and retry.
+          n=0
+          until git push; do
+            n=$((n+1)); [ "$n" -ge 6 ] && exit 1
+            sleep $((RANDOM % 8 + 2))
+            git pull --rebase origin master
+          done
+      - name: Notify Slack of Success
+        if: success() && steps.slack-build.outputs.ts
+        uses: slackapi/slack-github-action@v4
+        with:
+          method: chat.update
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            ts: "${{ steps.slack-build.outputs.ts }}"
+            text: "Deploy completed: ${{ github.repository }}"
+            attachments:
+              - color: "good"
+                text: "*Deploy COMPLETED*\n- Actor: ${{ github.actor }}\n- Job Tag: ${{ github.sha }}\n- Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Notify Slack of Failure
+        if: failure() && steps.slack-build.outputs.ts
+        uses: slackapi/slack-github-action@v4
+        with:
+          method: chat.update
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            ts: "${{ steps.slack-build.outputs.ts }}"
+            text: "Deploy failed: ${{ github.repository }}"
+            attachments:
+              - color: "danger"
+                text: "*Deploy FAILED*\n- Actor: ${{ github.actor }}\n- Job Tag: ${{ github.sha }}\n- Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -1,0 +1,313 @@
+package server_test
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/uptimy/upti.my-mcp/internal/server"
+	"github.com/uptimy/upti.my-mcp/internal/upstream"
+)
+
+const goodKey = "upt_good"
+
+// fakeUpstream serves the api, workflows and heartbeat routes the tools call
+// (one server stands in for all three) and records every write.
+type fakeUpstream struct {
+	mu         sync.Mutex
+	writes     map[string]map[string]any // "METHOD path" -> body
+	keyLookups int
+}
+
+func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") != "Bearer "+goodKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"error":"Invalid API key"}`)
+		return
+	}
+	if r.URL.Path == "/v1/api/api-key" {
+		f.mu.Lock()
+		f.keyLookups++
+		f.mu.Unlock()
+	}
+	if r.Method != http.MethodGet {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.writes[r.Method+" "+r.URL.Path] = body
+		f.mu.Unlock()
+	}
+	data, ok := map[string]string{
+		"GET /v1/api/api-key": `{"uuid":"k1","scope":"full","expiresAt":null,"workspace":{"id":1,"name":"Acme"}}`,
+		"GET /v1/api/healthchecks/": `{"results":[
+			{"uuid":"hc-ok","active":true,"intervalSeconds":60,"healthcheckTypeId":1,"applicationUuid":"app-ok","healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-ok","name":"Website","status":"Healthy"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}],"analyticsDailyRegionRollups":[{"huge":"payload"}]},
+			{"uuid":"hc-down","active":true,"intervalSeconds":30,"healthcheckTypeId":1,"applicationUuid":"app-down","healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-down","name":"Checkout API","status":"Down","lastStatusUpdate":"2026-10-06T10:00:00Z"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}]}]}`,
+		"GET /v1/api/healthchecks/hc-down": `{"uuid":"hc-down","active":true,"intervalSeconds":30,"timeoutSeconds":10,"healthcheckTypeId":1,"config":{"url":"https://acme.test/checkout","headers":{"Authorization":"Bearer secret"}},"application":{"uuid":"app-down","name":"Checkout API","status":"Down"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"},{"uuid":"s-sin","name":"Singapore"}],"tags":[{"id":7,"name":"prod"}]}`,
+		"GET /v1/api/healthchecks/hc-down/analytics/minute-region": `{"results":[
+			{"minuteBucket":"2026-10-06T10:00:00Z","schedulerUuid":"s-fra","totalCount":"2","successCount":"1","failureCount":"1","latencySumUs":"400000","latencyMaxUs":"300000","latencyP95Us":"300000"},
+			{"minuteBucket":"2026-10-06T10:00:00Z","schedulerUuid":"s-sin","totalCount":"2","successCount":"2","failureCount":"0","latencySumUs":"200000","latencyMaxUs":"120000","latencyP95Us":"110000"}]}`,
+		"GET /v1/api/healthchecks/hc-down/analytics/executions": `{"results":[
+			{"checkedAt":"2026-10-06T10:00:10Z","schedulerUuid":"s-fra","success":false,"responseTimeMs":300,"errorMessage":"HTTP 503"},
+			{"checkedAt":"2026-10-06T10:00:40Z","schedulerUuid":"s-fra","success":true,"responseTimeMs":100}]}`,
+		"GET /v1/api/heartbeat-monitors/":       `{"results":[{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"statusSnapshot":{"status":"Down","lastPingAt":"2026-10-05T01:00:00Z"}}]}`,
+		"GET /v1/api/heartbeat-monitors/hb-1":   `{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"graceSeconds":600,"credential":{"publicId":"pub123"},"steps":[],"statusSnapshot":{"status":"Down"}}`,
+		"GET /v1/api/incidents/":                `{"results":[{"uuid":"inc-1","title":"Checkout API is down","severity":"high","status":"Created","startedAt":"2026-10-06T10:00:00Z","incidentStatusPages":[{"statusPageUuid":"sp-1"}]}],"paginator":{"total":1}}`,
+		"GET /v1/api/incidents/inc-1":           `{"uuid":"inc-1","title":"Checkout API is down","description":"Checkout failing","severity":"high","status":"Investigating","startedAt":"2026-10-06T10:00:00Z","incidentUpdates":[{"message":"Looking into it","public":true,"createdAt":"2026-10-06T10:05:00Z","user":{"firstName":"Ada","lastName":"L"}}],"statusHistory":[{"fromStatus":"Created","toStatus":"Investigating","changedAt":"2026-10-06T10:05:00Z"}],"incidentStatusPages":[{"statusPageUuid":"sp-1"}]}`,
+		"GET /v1/api/status-pages/":             `{"results":[{"uuid":"sp-1","name":"Acme Status","slug":"acme"}]}`,
+		"POST /v1/api/incidents/inc-1/updates/": `{}`,
+		"PUT /v1/api/incidents/inc-1":           `{}`,
+		"PUT /v1/api/healthchecks/hc-down":      `{}`,
+		"PUT /v1/api/heartbeat-monitors/hb-1":   `{}`,
+		"POST /v1/api/maintenances/":            `{"uuid":"m-1","title":"DB upgrade","status":"Scheduled","startAt":"2026-10-06T22:00:00Z","finishAt":"2026-10-06T23:00:00Z"}`,
+	}[r.Method+" "+r.URL.Path]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"error":"Not found"}`)
+		return
+	}
+	_, _ = io.WriteString(w, `{"data":`+data+`}`)
+}
+
+func (f *fakeUpstream) write(key string) map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.writes[key]
+}
+
+type keyTransport struct{ key string }
+
+func (k keyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+k.key)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+func setup(t *testing.T) (*mcp.ClientSession, *fakeUpstream, string) {
+	t.Helper()
+	fake := &fakeUpstream{writes: map[string]map[string]any{}}
+	up := httptest.NewServer(fake)
+	t.Cleanup(up.Close)
+	srv := httptest.NewServer(server.New(upstream.New(up.URL, up.URL, up.URL), server.Config{
+		PublicURL:           "https://mcp.upti.my",
+		AuthorizationServer: "https://api.upti.my",
+		PublicHeartbeatsURL: "https://heartbeats.upti.my",
+		Version:             "test",
+	}))
+	t.Cleanup(srv.Close)
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	cs, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{
+		Endpoint:             srv.URL + "/mcp",
+		HTTPClient:           &http.Client{Transport: keyTransport{goodKey}},
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	return cs, fake, srv.URL
+}
+
+func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) map[string]any {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if res.IsError {
+		t.Fatalf("%s returned error: %v", name, res.Content[0].(*mcp.TextContent).Text)
+	}
+	var out map[string]any
+	b, _ := json.Marshal(res.StructuredContent)
+	_ = json.Unmarshal(b, &out)
+	return out
+}
+
+func TestRejectsMissingAndInvalidKeys(t *testing.T) {
+	_, _, base := setup(t)
+	for name, key := range map[string]string{"missing": "", "not upt_": "abc", "revoked": "upt_bad"} {
+		req, _ := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s key: got HTTP %d, want 401", name, resp.StatusCode)
+		}
+		want := `resource_metadata="https://mcp.upti.my/.well-known/oauth-protected-resource/mcp"`
+		if got := resp.Header.Get("WWW-Authenticate"); !strings.Contains(got, want) {
+			t.Errorf("%s key: WWW-Authenticate = %q, want it to contain %s", name, got, want)
+		}
+	}
+}
+
+func TestPublishesProtectedResourceMetadata(t *testing.T) {
+	_, _, base := setup(t)
+	for _, path := range []string{"/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"} {
+		resp, err := http.Get(base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var meta struct {
+			Resource             string   `json:"resource"`
+			AuthorizationServers []string `json:"authorization_servers"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&meta)
+		_ = resp.Body.Close()
+		if meta.Resource != "https://mcp.upti.my/mcp" || len(meta.AuthorizationServers) != 1 || meta.AuthorizationServers[0] != "https://api.upti.my" {
+			t.Errorf("%s: metadata = %+v", path, meta)
+		}
+	}
+}
+
+func TestListsTools(t *testing.T) {
+	cs, _, _ := setup(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Tools) != 10 {
+		t.Errorf("got %d tools, want 10", len(res.Tools))
+	}
+}
+
+func TestStatusOverviewPutsProblemsFirst(t *testing.T) {
+	cs, _, _ := setup(t)
+	out := call(t, cs, "get_status_overview", nil)
+
+	if out["workspace"] != "Acme" {
+		t.Errorf("workspace = %v", out["workspace"])
+	}
+	monitors := out["monitors"].([]any)
+	if len(monitors) != 3 {
+		t.Fatalf("got %d monitors, want 3", len(monitors))
+	}
+	for i, want := range []string{"Down", "Down", "Healthy"} {
+		if got := monitors[i].(map[string]any)["status"]; got != want {
+			t.Errorf("monitor %d status = %v, want %v", i, got, want)
+		}
+	}
+	if b, _ := json.Marshal(out); strings.Contains(string(b), "huge") {
+		t.Error("raw rollups leaked into the overview")
+	}
+	if pages := out["statusPages"].([]any); pages[0].(map[string]any)["url"] != "https://acme.upti.my" {
+		t.Errorf("status page url = %v", pages[0])
+	}
+}
+
+func TestGetMonitorRedactsSecretsAndFallsBackToHeartbeat(t *testing.T) {
+	cs, _, _ := setup(t)
+	hc := call(t, cs, "get_monitor", map[string]any{"uuid": "hc-down"})
+	target := hc["target"].(map[string]any)
+	if target["url"] != "https://acme.test/checkout" || target["headers"] != "[redacted]" {
+		t.Errorf("target = %v", target)
+	}
+
+	hb := call(t, cs, "get_monitor", map[string]any{"uuid": "hb-1"})
+	if hb["kind"] != "heartbeat" || hb["pingUrl"] != "https://heartbeats.upti.my/v1/monitors/pub123" {
+		t.Errorf("heartbeat = %v", hb)
+	}
+}
+
+func TestMonitorMetricsSummarizesRollups(t *testing.T) {
+	cs, _, _ := setup(t)
+	out := call(t, cs, "get_monitor_metrics", map[string]any{"uuid": "hc-down", "from": "2026-10-06T09:00:00Z", "to": "2026-10-06T11:00:00Z"})
+
+	if out["resolution"] != "minute" {
+		t.Errorf("resolution = %v", out["resolution"])
+	}
+	overall := out["overall"].(map[string]any)
+	if overall["checks"] != 4.0 || overall["failures"] != 1.0 || overall["uptimePercent"] != 75.0 || overall["avgLatencyMs"] != 150.0 {
+		t.Errorf("overall = %v", overall)
+	}
+	failures := out["recentFailures"].([]any)
+	if len(failures) != 1 || failures[0].(map[string]any)["region"] != "Frankfurt" {
+		t.Errorf("recentFailures = %v", failures)
+	}
+}
+
+func TestPostIncidentUpdateKeepsOtherFields(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "post_incident_update", map[string]any{"uuid": "inc-1", "message": "Fixed", "public": true, "status": "Resolved"})
+
+	if u := fake.write("POST /v1/api/incidents/inc-1/updates/"); u["message"] != "Fixed" || u["public"] != true {
+		t.Errorf("update body = %v", u)
+	}
+	put := fake.write("PUT /v1/api/incidents/inc-1")
+	if put["status"] != "Resolved" || put["title"] != "Checkout API is down" || put["severity"] != "high" {
+		t.Errorf("put body = %v", put)
+	}
+	if _, ok := put["statusPageUuids"]; ok {
+		t.Error("status update must not touch the published status pages")
+	}
+}
+
+func TestSetMonitorPaused(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "set_monitor_paused", map[string]any{"uuid": "hc-down", "paused": true})
+	hc := fake.write("PUT /v1/api/healthchecks/hc-down")
+	if hc["active"] != false || hc["intervalSeconds"] != 30.0 || hc["healthcheckTypeId"] != 1.0 {
+		t.Errorf("healthcheck body = %v", hc)
+	}
+	if cfg := hc["config"].(map[string]any); cfg["headers"] == "[redacted]" {
+		t.Error("pause must send the real config back, not the redacted one")
+	}
+
+	call(t, cs, "set_monitor_paused", map[string]any{"uuid": "hb-1", "paused": true})
+	if hb := fake.write("PUT /v1/api/heartbeat-monitors/hb-1"); hb["paused"] != true || hb["graceSeconds"] != 600.0 {
+		t.Errorf("heartbeat body = %v", hb)
+	}
+}
+
+func TestScheduleMaintenanceUsesApplicationUUIDs(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "schedule_maintenance", map[string]any{
+		"title": "DB upgrade", "description": "Primary failover",
+		"startAt": "2026-10-06T22:00:00Z", "finishAt": "2026-10-06T23:00:00Z",
+		"monitorUuids": []string{"hc-down", "hb-1"},
+	})
+	services := fake.write("POST /v1/api/maintenances/")["affectedServices"].([]any)
+	if len(services) != 2 || services[0].(map[string]any)["uuid"] != "app-down" || services[1].(map[string]any)["uuid"] != "hb-1" {
+		t.Errorf("affectedServices = %v", services)
+	}
+}
+
+func TestUpstreamErrorsBecomeToolErrors(t *testing.T) {
+	cs, _, _ := setup(t)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "trigger_check", Arguments: map[string]any{"uuid": "hb-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "heartbeats") {
+		t.Errorf("want a tool error explaining heartbeats can't be triggered, got %+v", res)
+	}
+}
+
+func TestKeyIsVerifiedOncePerSession(t *testing.T) {
+	cs, fake, _ := setup(t)
+	if _, err := cs.ListTools(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	call(t, cs, "get_status_overview", nil)
+	call(t, cs, "get_monitor", map[string]any{"uuid": "hc-down"})
+	call(t, cs, "list_incidents", nil)
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if fake.keyLookups != 1 {
+		t.Fatalf("initialize, tools/list and 3 tool calls asked upti.my-api to verify the key %d times, want 1 (cached)", fake.keyLookups)
+	}
+}
