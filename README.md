@@ -1,4 +1,4 @@
-# upti.my-mcp
+# upti.my-mcp 
 
 Uptimy's remote MCP server, at `https://mcp.upti.my/mcp`. It lets AI assistants check what is down, read uptime and latency, run incidents and schedule maintenance.
 
