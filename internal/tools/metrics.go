@@ -31,12 +31,13 @@ type metricsIn struct {
 }
 
 type stats struct {
-	Checks        int     `json:"checks"`
-	Failures      int     `json:"failures"`
-	UptimePercent float64 `json:"uptimePercent"`
-	AvgLatencyMs  float64 `json:"avgLatencyMs"`
-	P95LatencyMs  float64 `json:"p95LatencyMs"`
-	MaxLatencyMs  float64 `json:"maxLatencyMs"`
+	Checks   int `json:"checks"`
+	Failures int `json:"failures"`
+	// Omitted when the range has no checks, rather than reported as 0%.
+	UptimePercent *float64 `json:"uptimePercent,omitempty"`
+	AvgLatencyMs  float64  `json:"avgLatencyMs"`
+	P95LatencyMs  float64  `json:"p95LatencyMs"`
+	MaxLatencyMs  float64  `json:"maxLatencyMs"`
 }
 
 type regionStats struct {
@@ -175,6 +176,21 @@ func (t *toolset) monitorMetrics(ctx context.Context, req *mcp.CallToolRequest, 
 	if err := t.call(ctx, req, upstream.API, http.MethodGet, base+endpoint, q, nil, &rollups); err != nil {
 		return nil, metricsOut{}, err
 	}
+	// Hourly and daily rollups are built by a job after each hour ends, so
+	// they lack the latest hour or so. Fill that tail from minute rollups,
+	// starting right after the newest rollup returned, so a recent outage
+	// isn't missing from the totals and nothing is counted twice.
+	if endpoint != "minute-region" {
+		tailFrom := tailStart(rollups.Results, endpoint == "daily-region", from, to)
+		if tailFrom.Before(to) {
+			var tail upstream.Results[rollup]
+			q := url.Values{"from": {tailFrom.Format(time.RFC3339)}, "to": {to.Format(time.RFC3339)}}
+			if err := t.call(ctx, req, upstream.API, http.MethodGet, base+"minute-region", q, nil, &tail); err != nil {
+				return nil, metricsOut{}, err
+			}
+			rollups.Results = append(rollups.Results, tail.Results...)
+		}
+	}
 
 	var execs upstream.Results[execution]
 	failFrom := to.Add(-failureWindow)
@@ -197,6 +213,30 @@ func (t *toolset) monitorMetrics(ctx context.Context, req *mcp.CallToolRequest, 
 	return nil, out, nil
 }
 
+// maxTail bounds the minute-rollup tail: the hourly job is minutes behind,
+// never hours, so a longer gap means there's simply no data.
+const maxTail = 3 * time.Hour
+
+// tailStart is where minute rollups take over from hourly or daily ones.
+// Hourly: right after the newest hour bucket returned. Daily: today's bucket
+// is derived from hourly rollups, so from the start of the current hour.
+func tailStart(rows []rollup, daily bool, from, to time.Time) time.Time {
+	start := to.Add(-maxTail)
+	if daily {
+		start = to.Truncate(time.Hour)
+	} else {
+		for _, r := range rows {
+			if t, err := time.Parse(time.RFC3339, r.HourBucket); err == nil && t.Add(time.Hour).After(start) {
+				start = t.Add(time.Hour)
+			}
+		}
+	}
+	if start.Before(from) {
+		start = from
+	}
+	return start
+}
+
 // acc sums rollup rows into stats.
 type acc struct {
 	total, failures, latSumUs, maxUs, p95Weighted float64
@@ -213,7 +253,8 @@ func (a *acc) add(r rollup) {
 func (a acc) stats() stats {
 	s := stats{Checks: int(a.total), Failures: int(a.failures), MaxLatencyMs: round(a.maxUs / 1000)}
 	if a.total > 0 {
-		s.UptimePercent = round(100 * (a.total - a.failures) / a.total)
+		uptime := round(100 * (a.total - a.failures) / a.total)
+		s.UptimePercent = &uptime
 		s.AvgLatencyMs = round(a.latSumUs / a.total / 1000)
 		s.P95LatencyMs = round(a.p95Weighted / a.total / 1000)
 	}

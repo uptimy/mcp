@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "my.upti/mcp",
+  "title": "Uptimy",
+  "description": "Uptime monitoring and incidents: see what's down, read uptime and latency, post status page updates.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.upti.my/docs/mcp",
+  "icons": [
+    {
+      "src": "https://www.upti.my/brand/uptimy-app-icon.png",
+      "mimeType": "image/png",
+      "sizes": ["1024x1024"]
+    },
+    {
+      "src": "https://www.upti.my/brand/uptimy-app-icon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.upti.my/mcp"
+    }
+  ]
+}

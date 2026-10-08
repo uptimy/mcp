@@ -182,6 +182,22 @@ func TestListsTools(t *testing.T) {
 	if len(res.Tools) != 10 {
 		t.Errorf("got %d tools, want 10", len(res.Tools))
 	}
+	// Directory reviews (Claude, ChatGPT) require a title and explicit
+	// read-only, destructive and open-world hints on every tool.
+	publishes := map[string]bool{"create_incident": true, "post_incident_update": true, "schedule_maintenance": true}
+	for _, tool := range res.Tools {
+		a := tool.Annotations
+		if tool.Title == "" || a == nil || a.DestructiveHint == nil || a.OpenWorldHint == nil {
+			t.Errorf("%s: missing title or hints: %+v", tool.Name, a)
+			continue
+		}
+		if *a.OpenWorldHint != publishes[tool.Name] {
+			t.Errorf("%s: openWorldHint = %v, want %v (posts to public status pages)", tool.Name, *a.OpenWorldHint, publishes[tool.Name])
+		}
+		if a.ReadOnlyHint && *a.DestructiveHint {
+			t.Errorf("%s: read-only tools can't be destructive", tool.Name)
+		}
+	}
 }
 
 func TestStatusOverviewPutsProblemsFirst(t *testing.T) {
@@ -309,5 +325,22 @@ func TestKeyIsVerifiedOncePerSession(t *testing.T) {
 	defer fake.mu.Unlock()
 	if fake.keyLookups != 1 {
 		t.Fatalf("initialize, tools/list and 3 tool calls asked upti.my-api to verify the key %d times, want 1 (cached)", fake.keyLookups)
+	}
+}
+
+func TestServesOpenAIAppsChallengeOnlyWhenSet(t *testing.T) {
+	up := upstream.New("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1")
+	for token, want := range map[string]int{"": http.StatusNotFound, "tok-123": http.StatusOK} {
+		srv := httptest.NewServer(server.New(up, server.Config{PublicURL: "https://mcp.upti.my", AuthorizationServer: "https://api.upti.my", OpenAIAppsChallenge: token}))
+		resp, err := http.Get(srv.URL + "/.well-known/openai-apps-challenge")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		srv.Close()
+		if resp.StatusCode != want || (want == http.StatusOK && string(body) != token) {
+			t.Errorf("token %q: got %d %q", token, resp.StatusCode, body)
+		}
 	}
 }

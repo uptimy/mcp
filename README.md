@@ -72,6 +72,7 @@ make run    # listens on :8080, talks to production by default
 | `PUBLIC_HEARTBEATS_URL` | `https://heartbeats.upti.my` (used in ping URLs) |
 | `PUBLIC_URL` | `https://mcp.upti.my` (OAuth resource URL) |
 | `AUTHORIZATION_SERVER` | `https://api.upti.my` |
+| `OPENAI_APPS_CHALLENGE` | unset; ChatGPT's domain-verification token, served at `/.well-known/openai-apps-challenge` when set |
 
 ## Deployment
 

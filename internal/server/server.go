@@ -33,6 +33,10 @@ type Config struct {
 	// PublicHeartbeatsURL is the public base of heartbeat ping URLs.
 	PublicHeartbeatsURL string
 	Version             string
+	// OpenAIAppsChallenge is the domain-verification token from OpenAI's
+	// plugin dashboard, served at /.well-known/openai-apps-challenge. Empty
+	// until a ChatGPT listing is being verified.
+	OpenAIAppsChallenge string
 }
 
 // New returns the HTTP handler for the whole service.
@@ -68,6 +72,12 @@ func New(up *upstream.Client, cfg Config) http.Handler {
 	mux.Handle(metadataPath, metadata)
 	// Clients that don't read the 401 header look here first.
 	mux.Handle("/.well-known/oauth-protected-resource", metadata)
+	if token := strings.TrimSpace(cfg.OpenAIAppsChallenge); token != "" {
+		mux.HandleFunc("GET /.well-known/openai-apps-challenge", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte(token))
+		})
+	}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	return mux

@@ -40,6 +40,7 @@ func main() {
 			AuthorizationServer: env("AUTHORIZATION_SERVER", "https://api.upti.my"),
 			PublicHeartbeatsURL: env("PUBLIC_HEARTBEATS_URL", "https://heartbeats.upti.my"),
 			Version:             version,
+			OpenAIAppsChallenge: os.Getenv("OPENAI_APPS_CHALLENGE"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

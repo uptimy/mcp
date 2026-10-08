@@ -67,35 +67,35 @@ func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) 
 		Name:        "create_incident",
 		Title:       "Create incident",
 		Description: "Open an incident manually. Pass statusPageUuids to show it publicly on those status pages (subscribers are notified).",
-		Annotations: write(false, false),
+		Annotations: write(false, false, true),
 	}, t.createIncident)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "post_incident_update",
 		Title:       "Post incident update",
 		Description: "Add a timeline update to an incident and/or move it to a new status (Acknowledged, Investigating, Identified, Monitoring, Resolved). Public updates appear on every status page the incident is shown on.",
-		Annotations: write(false, false),
+		Annotations: write(false, false, true),
 	}, t.postIncidentUpdate)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "set_monitor_paused",
 		Title:       "Pause or resume monitor",
 		Description: "Pause (stop checking and alerting) or resume a website/API monitor or cron heartbeat.",
-		Annotations: write(true, true),
+		Annotations: write(true, true, false),
 	}, t.setMonitorPaused)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "trigger_check",
 		Title:       "Run check now",
 		Description: "Run a website/API monitor's check immediately from all its regions, e.g. to confirm a fix. Read the result with get_monitor_metrics a few seconds later.",
-		Annotations: write(false, false),
+		Annotations: write(false, false, false),
 	}, t.triggerCheck)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "schedule_maintenance",
 		Title:       "Schedule maintenance",
 		Description: "Schedule a maintenance window. Alerts and incidents for the listed monitors are suppressed while it is active. Pass statusPageUuids to announce it on status pages.",
-		Annotations: write(false, false),
+		Annotations: write(false, false, true),
 	}, t.scheduleMaintenance)
 }
 
@@ -104,14 +104,18 @@ type toolset struct {
 	publicHeartbeatsURL string
 }
 
+// Every tool sets all three hints explicitly: directories (Claude, ChatGPT)
+// review them, and ChatGPT requires explicit booleans.
 func readOnly() *mcp.ToolAnnotations {
 	f := false
-	return &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &f}
+	return &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &f, OpenWorldHint: &f}
 }
 
-func write(destructive, idempotent bool) *mcp.ToolAnnotations {
-	f := false
-	return &mcp.ToolAnnotations{DestructiveHint: &destructive, IdempotentHint: idempotent, OpenWorldHint: &f}
+// write describes a tool that changes the workspace. publishes marks tools
+// that can post to public status pages (and their subscribers): the
+// open-world hint, which clients use to ask before acting outside the app.
+func write(destructive, idempotent, publishes bool) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{DestructiveHint: &destructive, IdempotentHint: idempotent, OpenWorldHint: &publishes}
 }
 
 // call runs one upstream request with the key the request authenticated with.
