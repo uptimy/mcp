@@ -32,7 +32,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 **Description** (Claude: 2,000 characters max; ChatGPT long description: 4,000)
 > Uptimy monitors websites, APIs and cron jobs from several regions, opens incidents when something fails, and runs status pages. This connector brings that into your assistant.
 >
-> Ask what's down right now, how a service's uptime and latency looked over any time range and in each region, or why an incident opened, and the assistant answers from your real checks, including the errors from failed checks. It can also run the incident with you: post timeline updates, move it to a new status up to Resolved, publish updates to your status pages, schedule a maintenance window, pause or resume a monitor, or run a check right away to confirm a fix.
+> Ask what's down right now, how a service's uptime and latency looked over any time range and in each region, or why an incident opened, and the assistant answers from your real checks, including the errors from failed checks. It also sees the third-party services you follow, such as GitHub, Cloudflare or Stripe, so it can tell your problem apart from a provider's. It can also run the incident with you: post timeline updates, move it to a new status up to Resolved, publish updates to your status pages, schedule a maintenance window, pause or resume a monitor, or run a check right away to confirm a fix.
 >
 > You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can revoke at any time under Settings → API Keys. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting anything public, and there are no tools that delete anything. Creating and editing monitors stays in the Uptimy app and CLI.
 
@@ -56,7 +56,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 
 **Auth, for forms that ask:** OAuth 2.1 with dynamic client registration (RFC 7591) and PKCE S256. Protected resource metadata at `https://mcp.upti.my/.well-known/oauth-protected-resource/mcp`; authorization server `https://api.upti.my` (RFC 8414 metadata, RFC 9207 `iss`). Any HTTPS redirect URI can register, plus loopback `http://localhost:<port>` and `http://127.0.0.1:<port>`, so Claude, ChatGPT and Cursor callbacks need no allowlisting. The server also accepts an API key as a Bearer header.
 
-**Tools:** 10. Read: `get_status_overview`, `get_monitor`, `get_monitor_metrics`, `list_incidents`, `get_incident`. Write: `create_incident`, `post_incident_update`, `schedule_maintenance` (these three can publish to public status pages, so they're marked open-world), `set_monitor_paused` (destructive, idempotent), `trigger_check`. Every tool has a title and explicit read-only, destructive and open-world hints; a test in `internal/server` keeps it that way.
+**Tools:** 12. Read: `get_status_overview`, `get_monitor`, `get_monitor_metrics`, `list_incidents`, `get_incident`, `get_dependencies`. Write: `create_incident`, `post_incident_update`, `schedule_maintenance` (these three can publish to public status pages, so they're marked open-world), `set_monitor_paused` and `follow_dependency` (destructive, idempotent: they can turn monitoring or a follow off), `trigger_check`. Every tool has a title and explicit read-only, destructive and open-world hints; a test in `internal/server` keeps it that way.
 
 ## Official MCP Registry
 

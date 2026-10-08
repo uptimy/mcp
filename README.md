@@ -13,11 +13,13 @@ It is a stateless gateway with no database or secrets of its own. Each request c
 | `get_monitor_metrics` | read | api analytics rollups (minute/hour/day by range) + last hour of executions |
 | `list_incidents` | read | workflows incidents |
 | `get_incident` | read | workflows incident with timeline |
+| `get_dependencies` | read | api public services catalog + workflows source follows |
 | `create_incident` | write | workflows incidents |
 | `post_incident_update` | write | workflows incident updates + status change |
 | `set_monitor_paused` | write | api healthcheck / heartbeat monitor update |
 | `trigger_check` | write | api healthcheck trigger |
 | `schedule_maintenance` | write | workflows maintenances |
+| `follow_dependency` | write | workflows source follows |
 
 There are no delete tools. Creating and editing monitors, alert rules and status pages stays in the CLI.
 

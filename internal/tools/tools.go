@@ -31,7 +31,7 @@ func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_status_overview",
 		Title:       "Status overview",
-		Description: "What is down right now: every website/API monitor and cron heartbeat with its current status, open incidents, and status pages. Problems are listed first. Use the UUIDs here with the other tools.",
+		Description: "What is down right now: every website/API monitor and cron heartbeat with its current status, open incidents, status pages, and the third-party services the workspace follows (e.g. GitHub, Stripe) with their status. Problems are listed first. Use the UUIDs here with the other tools.",
 		Annotations: readOnly(),
 	}, t.statusOverview)
 
@@ -62,6 +62,20 @@ func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) 
 		Description: "One incident with its timeline: updates (public and internal), status changes, and the status pages it is shown on.",
 		Annotations: readOnly(),
 	}, t.getIncident)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "get_dependencies",
+		Title:       "Third-party dependencies",
+		Description: "Third-party services Uptimy measures independently (GitHub, Cloudflare, Stripe, ...) and which ones this workspace follows. Without slug: every service with its status and 30-day uptime, followed ones first. With slug: that service's probes (e.g. website, API, git operations), what each one means, its status and uptime, and whether it's followed. Use it to tell whether a problem is yours or a provider's.",
+		Annotations: readOnly(),
+	}, t.getDependencies)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "follow_dependency",
+		Title:       "Follow or unfollow a dependency",
+		Description: "Follow a third-party service so its outages open incidents in this workspace and run its alert workflows, or stop following it (which resolves its open incident here). Optionally follow only some probes.",
+		Annotations: write(true, true, false),
+	}, t.followDependency)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "create_incident",

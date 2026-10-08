@@ -41,13 +41,21 @@ type overviewStatusPage struct {
 	URL  string `json:"url"`
 }
 
+type overviewDependency struct {
+	Slug   string `json:"slug"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
 type overviewOut struct {
 	Workspace     string               `json:"workspace,omitempty"`
 	Summary       map[string]int       `json:"summary"`
 	Monitors      []overviewMonitor    `json:"monitors"`
 	OpenIncidents []overviewIncident   `json:"openIncidents"`
 	StatusPages   []overviewStatusPage `json:"statusPages"`
-	Warnings      []string             `json:"warnings,omitempty"`
+	// Third-party services the workspace follows, problems first.
+	Dependencies []overviewDependency `json:"dependencies"`
+	Warnings     []string             `json:"warnings,omitempty"`
 }
 
 // statusRank orders monitors so problems come first.
@@ -55,14 +63,16 @@ var statusRank = map[string]int{"Down": 0, "Degraded": 1, "AtRisk": 1, "Unknown"
 
 func (t *toolset) statusOverview(ctx context.Context, req *mcp.CallToolRequest, _ overviewIn) (*mcp.CallToolResult, overviewOut, error) {
 	var (
-		wg                             sync.WaitGroup
-		hcs                            []healthcheck
-		hbs                            []heartbeat
-		incidents                      upstream.Results[incident]
-		pages                          upstream.Results[statusPage]
-		errHC, errHB, errInc, errPages error
+		wg                                      sync.WaitGroup
+		hcs                                     []healthcheck
+		hbs                                     []heartbeat
+		incidents                               upstream.Results[incident]
+		pages                                   upstream.Results[statusPage]
+		services                                []publicService
+		followed                                map[int]map[string]bool
+		errHC, errHB, errInc, errPages, errDeps error
 	)
-	wg.Add(4)
+	wg.Add(5)
 	go func() { defer wg.Done(); hcs, errHC = t.listHealthchecks(ctx, req) }()
 	go func() { defer wg.Done(); hbs, errHB = t.listHeartbeats(ctx, req) }()
 	go func() {
@@ -74,6 +84,12 @@ func (t *toolset) statusOverview(ctx context.Context, req *mcp.CallToolRequest, 
 		defer wg.Done()
 		errPages = t.call(ctx, req, upstream.API, http.MethodGet, "/v1/api/status-pages/", nil, nil, &pages)
 	}()
+	go func() {
+		defer wg.Done()
+		if followed, errDeps = t.follows(ctx, req); errDeps == nil && len(followed) > 0 {
+			services, errDeps = t.catalog(ctx, req)
+		}
+	}()
 	wg.Wait()
 
 	// Monitors are the point of this tool; the other sources degrade to a
@@ -81,7 +97,12 @@ func (t *toolset) statusOverview(ctx context.Context, req *mcp.CallToolRequest, 
 	if errHC != nil {
 		return nil, overviewOut{}, errHC
 	}
-	return nil, buildOverview(workspace(req), hcs, hbs, incidents.Results, pages.Results, errHB, errInc, errPages), nil
+	out := buildOverview(workspace(req), hcs, hbs, incidents.Results, pages.Results, errHB, errInc, errPages)
+	out.Dependencies = followedDependencies(services, followed)
+	if errDeps != nil {
+		out.Warnings = append(out.Warnings, "dependencies unavailable: "+errDeps.Error())
+	}
+	return nil, out, nil
 }
 
 func buildOverview(ws string, hcs []healthcheck, hbs []heartbeat, incidents []incident, pages []statusPage, errHB, errInc, errPages error) overviewOut {
@@ -165,4 +186,16 @@ func (p statusPage) url() string {
 		return "https://" + *p.CustomDomain
 	}
 	return "https://" + p.Slug + ".upti.my"
+}
+
+// followedDependencies lists the followed services, problems first.
+func followedDependencies(services []publicService, followed map[int]map[string]bool) []overviewDependency {
+	out := []overviewDependency{}
+	for _, s := range services {
+		if len(followed[s.WorkspaceID]) > 0 {
+			out = append(out, overviewDependency{Slug: s.Slug, Name: s.Name, Status: s.Status})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return (out[i].Status != "operational") && (out[j].Status == "operational") })
+	return out
 }

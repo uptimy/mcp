@@ -8,7 +8,9 @@ import (
 func TestTailStart(t *testing.T) {
 	to := time.Date(2026, 10, 8, 11, 20, 0, 0, time.UTC)
 	from := to.Add(-24 * time.Hour)
-	hour := func(h int) rollup { return rollup{HourBucket: time.Date(2026, 10, 8, h, 0, 0, 0, time.UTC).Format(time.RFC3339)} }
+	hour := func(h int) rollup {
+		return rollup{HourBucket: time.Date(2026, 10, 8, h, 0, 0, 0, time.UTC).Format(time.RFC3339)}
+	}
 
 	cases := []struct {
 		name  string

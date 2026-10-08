@@ -66,6 +66,15 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"PUT /v1/api/healthchecks/hc-down":      `{}`,
 		"PUT /v1/api/heartbeat-monitors/hb-1":   `{}`,
 		"POST /v1/api/maintenances/":            `{"uuid":"m-1","title":"DB upgrade","status":"Scheduled","startAt":"2026-10-06T22:00:00Z","finishAt":"2026-10-06T23:00:00Z"}`,
+		"GET /v1/public/services": `{"services":[
+			{"slug":"github","name":"GitHub","workspaceId":369,"status":"degraded","probeCount":2,"uptime30":99.4},
+			{"slug":"stripe","name":"Stripe","workspaceId":370,"status":"operational","probeCount":3,"uptime30":99.99}]}`,
+		"GET /v1/public/services/github": `{"slug":"github","name":"GitHub","workspaceId":369,"status":"degraded","probes":[
+			{"key":"website","label":"Website","meaning":"github.com is unreachable","applicationUuid":"p-web","status":"operational","uptime":{"d1":100,"d7":99.9,"d30":99.8}},
+			{"key":"api","label":"API","meaning":"api.github.com errors","applicationUuid":"p-api","status":"degraded","uptime":{"d1":97.1,"d7":99.2,"d30":99.5}}]}`,
+		"GET /v1/api/source-follows/":       `{"results":[{"sourceWorkspaceId":369,"sourceUuid":"p-api"}]}`,
+		"PUT /v1/api/source-follows/":       `{"results":[]}`,
+		"DELETE /v1/api/source-follows/369": `{}`,
 	}[r.Method+" "+r.URL.Path]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -179,8 +188,8 @@ func TestListsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 10 {
-		t.Errorf("got %d tools, want 10", len(res.Tools))
+	if len(res.Tools) != 12 {
+		t.Errorf("got %d tools, want 12", len(res.Tools))
 	}
 	// Directory reviews (Claude, ChatGPT) require a title and explicit
 	// read-only, destructive and open-world hints on every tool.
@@ -342,5 +351,51 @@ func TestServesOpenAIAppsChallengeOnlyWhenSet(t *testing.T) {
 		if resp.StatusCode != want || (want == http.StatusOK && string(body) != token) {
 			t.Errorf("token %q: got %d %q", token, resp.StatusCode, body)
 		}
+	}
+}
+
+func TestOverviewListsFollowedDependencies(t *testing.T) {
+	cs, _, _ := setup(t)
+	out := call(t, cs, "get_status_overview", nil)
+	deps := out["dependencies"].([]any)
+	if len(deps) != 1 || deps[0].(map[string]any)["slug"] != "github" || deps[0].(map[string]any)["status"] != "degraded" {
+		t.Errorf("dependencies = %v, want only the followed GitHub", deps)
+	}
+}
+
+func TestGetDependencies(t *testing.T) {
+	cs, _, _ := setup(t)
+	list := call(t, cs, "get_dependencies", nil)["services"].([]any)
+	if len(list) != 2 || list[0].(map[string]any)["slug"] != "github" || list[0].(map[string]any)["followedProbes"] != 1.0 {
+		t.Errorf("catalog = %v, want followed GitHub first", list)
+	}
+	if got := call(t, cs, "get_dependencies", map[string]any{"query": "STRI"})["services"].([]any); len(got) != 1 {
+		t.Errorf("query filter = %v", got)
+	}
+	detail := call(t, cs, "get_dependencies", map[string]any{"slug": "github"})
+	probes := detail["probes"].([]any)
+	if len(probes) != 2 || probes[0].(map[string]any)["followed"] != false || probes[1].(map[string]any)["followed"] != true {
+		t.Errorf("probes = %v", probes)
+	}
+}
+
+func TestFollowDependency(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "follow_dependency", map[string]any{"slug": "github", "follow": true})
+	put := fake.write("PUT /v1/api/source-follows/")
+	if put["sourceWorkspaceId"] != 369.0 || len(put["sourceUuids"].([]any)) != 2 {
+		t.Errorf("follow all = %v", put)
+	}
+	call(t, cs, "follow_dependency", map[string]any{"slug": "github", "follow": true, "probes": []string{"api"}})
+	if uuids := fake.write("PUT /v1/api/source-follows/")["sourceUuids"].([]any); len(uuids) != 1 || uuids[0] != "p-api" {
+		t.Errorf("follow one probe = %v", uuids)
+	}
+	call(t, cs, "follow_dependency", map[string]any{"slug": "github", "follow": false})
+	if _, ok := fake.writes["DELETE /v1/api/source-follows/369"]; !ok {
+		t.Error("unfollow should DELETE the service's follows")
+	}
+	res, _ := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "follow_dependency", Arguments: map[string]any{"slug": "github", "follow": true, "probes": []string{"nope"}}})
+	if !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "website, api") {
+		t.Errorf("unknown probe should list the real ones: %+v", res)
 	}
 }
