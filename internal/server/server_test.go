@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -23,6 +24,7 @@ const goodKey = "upt_good"
 type fakeUpstream struct {
 	mu         sync.Mutex
 	writes     map[string]map[string]any // "METHOD path" -> body
+	queries    map[string]url.Values     // path -> last query
 	keyLookups int
 }
 
@@ -32,6 +34,12 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"error":"Invalid API key"}`)
 		return
 	}
+	f.mu.Lock()
+	if f.queries == nil {
+		f.queries = map[string]url.Values{}
+	}
+	f.queries[r.URL.Path] = r.URL.Query()
+	f.mu.Unlock()
 	if r.URL.Path == "/v1/api/api-key" {
 		f.mu.Lock()
 		f.keyLookups++
@@ -82,6 +90,12 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = io.WriteString(w, `{"data":`+data+`}`)
+}
+
+func (f *fakeUpstream) lastQuery(path string) url.Values {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.queries[path]
 }
 
 func (f *fakeUpstream) write(key string) map[string]any {
@@ -305,6 +319,14 @@ func TestPostIncidentUpdateWithoutPagesLeavesThemAlone(t *testing.T) {
 	call(t, cs, "post_incident_update", map[string]any{"uuid": "inc-1", "status": "Monitoring", "public": false})
 	if put := fake.write("PUT /v1/api/incidents/inc-1"); put == nil || put["statusPageUuids"] != nil {
 		t.Fatalf("a status change must not send statusPageUuids (it would replace the set): %v", put)
+	}
+}
+
+func TestListIncidentsDefaultsToAll(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "list_incidents", map[string]any{})
+	if got := fake.lastQuery("/v1/api/incidents/").Get("status"); got != "All" {
+		t.Fatalf("status = %q: without it workflows lists only open incidents", got)
 	}
 }
 

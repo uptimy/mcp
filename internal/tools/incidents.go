@@ -85,6 +85,8 @@ func (t *toolset) listIncidents(ctx context.Context, req *mcp.CallToolRequest, i
 	q := url.Values{"sortBy": {"createdAt"}, "sortDirection": {"DESC"}}
 	switch strings.ToLower(in.Status) {
 	case "", "all":
+		// Without a status, workflows lists only the open incidents.
+		q.Set("status", "All")
 	case "open":
 		q.Set("status", "Ongoing")
 	case "resolved":
