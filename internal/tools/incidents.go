@@ -211,15 +211,16 @@ func (t *toolset) createIncident(ctx context.Context, req *mcp.CallToolRequest, 
 }
 
 type incidentUpdateIn struct {
-	UUID    string `json:"uuid" jsonschema:"incident UUID"`
-	Message string `json:"message,omitempty" jsonschema:"update text; required unless only changing status"`
-	Public  bool   `json:"public" jsonschema:"true shows the message on the incident's status pages and notifies subscribers; false keeps it internal"`
-	Status  string `json:"status,omitempty" jsonschema:"new status: Acknowledged, Investigating, Identified, Monitoring or Resolved"`
+	UUID            string   `json:"uuid" jsonschema:"incident UUID"`
+	Message         string   `json:"message,omitempty" jsonschema:"update text; required unless only changing status or status pages"`
+	Public          bool     `json:"public" jsonschema:"true shows the message on the status pages the incident is on; false keeps it internal"`
+	Status          string   `json:"status,omitempty" jsonschema:"new status: Acknowledged, Investigating, Identified, Monitoring or Resolved"`
+	StatusPageUUIDs []string `json:"statusPageUuids,omitempty" jsonschema:"status pages to also show the incident on, added to the ones it is already on (get_status_overview lists them). Incidents a monitor opened automatically are on no status page until you add one."`
 }
 
 func (t *toolset) postIncidentUpdate(ctx context.Context, req *mcp.CallToolRequest, in incidentUpdateIn) (*mcp.CallToolResult, incidentOut, error) {
-	if strings.TrimSpace(in.Message) == "" && in.Status == "" {
-		return nil, incidentOut{}, errors.New("pass a message, a status, or both")
+	if strings.TrimSpace(in.Message) == "" && in.Status == "" && len(in.StatusPageUUIDs) == 0 {
+		return nil, incidentOut{}, errors.New("pass a message, a status, status pages, or a combination")
 	}
 	if in.Status != "" && !slices.Contains(incidentStatuses, in.Status) {
 		return nil, incidentOut{}, errors.New("status must be one of " + strings.Join(incidentStatuses, ", "))
@@ -229,21 +230,39 @@ func (t *toolset) postIncidentUpdate(ctx context.Context, req *mcp.CallToolReque
 	}
 	path := "/v1/api/incidents/" + url.PathEscape(in.UUID)
 
-	if strings.TrimSpace(in.Message) != "" {
-		if err := t.call(ctx, req, upstream.Workflows, http.MethodPost, path+"/updates/", nil, map[string]any{"message": in.Message, "public": in.Public}, nil); err != nil {
-			return nil, incidentOut{}, err
-		}
-	}
-	if in.Status != "" {
-		// The update replaces title/description/severity/status together, so
-		// it is built from the current incident (as uptimyctl does). Leaving
-		// statusPageUuids out keeps the published pages as they are.
+	// Pages first, so a public message posted below shows on them at once.
+	if in.Status != "" || len(in.StatusPageUUIDs) > 0 {
+		// The update replaces title/description/severity/status (and the status
+		// page set, when sent) together, so it is built from the current
+		// incident, as uptimyctl does.
 		inc, err := t.fetchIncident(ctx, req, in.UUID)
 		if err != nil {
 			return nil, incidentOut{}, err
 		}
-		body := map[string]any{"title": inc.Title, "severity": inc.Severity, "status": in.Status, "description": inc.Description}
+		status := inc.Status
+		if in.Status != "" {
+			status = in.Status
+		}
+		body := map[string]any{"title": inc.Title, "severity": inc.Severity, "status": status, "description": inc.Description}
+		if len(in.StatusPageUUIDs) > 0 {
+			// Workflows replaces the whole set; add to the pages already linked.
+			pages := []string{}
+			for _, p := range inc.StatusPages {
+				pages = append(pages, p.StatusPageUUID)
+			}
+			for _, p := range in.StatusPageUUIDs {
+				if !slices.Contains(pages, p) {
+					pages = append(pages, p)
+				}
+			}
+			body["statusPageUuids"] = pages
+		}
 		if err := t.call(ctx, req, upstream.Workflows, http.MethodPut, path, nil, body, nil); err != nil {
+			return nil, incidentOut{}, err
+		}
+	}
+	if strings.TrimSpace(in.Message) != "" {
+		if err := t.call(ctx, req, upstream.Workflows, http.MethodPost, path+"/updates/", nil, map[string]any{"message": in.Message, "public": in.Public}, nil); err != nil {
 			return nil, incidentOut{}, err
 		}
 	}

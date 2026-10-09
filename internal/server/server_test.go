@@ -280,6 +280,34 @@ func TestPostIncidentUpdateKeepsOtherFields(t *testing.T) {
 	}
 }
 
+func TestPostIncidentUpdateAddsStatusPages(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "post_incident_update", map[string]any{"uuid": "inc-1", "message": "We're on it", "public": true, "statusPageUuids": []string{"sp-2", "sp-1"}})
+
+	put := fake.write("PUT /v1/api/incidents/inc-1")
+	if put == nil {
+		t.Fatal("status pages were not set")
+	}
+	pages, _ := put["statusPageUuids"].([]any)
+	if len(pages) != 2 || pages[0] != "sp-1" || pages[1] != "sp-2" {
+		t.Fatalf("statusPageUuids = %v, want the existing sp-1 plus the new sp-2 (workflows replaces the set)", put["statusPageUuids"])
+	}
+	if put["status"] != "Investigating" || put["title"] != "Checkout API is down" {
+		t.Fatalf("PUT changed other fields: %v", put)
+	}
+	if up := fake.write("POST /v1/api/incidents/inc-1/updates/"); up["message"] != "We're on it" || up["public"] != true {
+		t.Fatalf("public update not posted: %v", up)
+	}
+}
+
+func TestPostIncidentUpdateWithoutPagesLeavesThemAlone(t *testing.T) {
+	cs, fake, _ := setup(t)
+	call(t, cs, "post_incident_update", map[string]any{"uuid": "inc-1", "status": "Monitoring", "public": false})
+	if put := fake.write("PUT /v1/api/incidents/inc-1"); put == nil || put["statusPageUuids"] != nil {
+		t.Fatalf("a status change must not send statusPageUuids (it would replace the set): %v", put)
+	}
+}
+
 func TestSetMonitorPaused(t *testing.T) {
 	cs, fake, _ := setup(t)
 	call(t, cs, "set_monitor_paused", map[string]any{"uuid": "hc-down", "paused": true})

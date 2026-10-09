@@ -80,14 +80,14 @@ func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "create_incident",
 		Title:       "Create incident",
-		Description: "Open an incident manually. Pass statusPageUuids to show it publicly on those status pages (subscribers are notified).",
+		Description: "Open an incident manually. Pass statusPageUuids to show it publicly on those status pages.",
 		Annotations: write(false, false, true),
 	}, t.createIncident)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "post_incident_update",
 		Title:       "Post incident update",
-		Description: "Add a timeline update to an incident and/or move it to a new status (Acknowledged, Investigating, Identified, Monitoring, Resolved). Public updates appear on every status page the incident is shown on.",
+		Description: "Add a timeline update to an incident, move it to a new status (Acknowledged, Investigating, Identified, Monitoring, Resolved), and/or show it on more status pages. Public updates appear on every status page the incident is on; pass statusPageUuids to publish an incident that is on none yet (incidents opened automatically by a monitor start on none).",
 		Annotations: write(false, false, true),
 	}, t.postIncidentUpdate)
 

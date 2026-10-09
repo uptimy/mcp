@@ -15,7 +15,7 @@ It is a stateless gateway with no database or secrets of its own. Each request c
 | `get_incident` | read | workflows incident with timeline |
 | `get_dependencies` | read | api public services catalog + workflows source follows |
 | `create_incident` | write | workflows incidents |
-| `post_incident_update` | write | workflows incident updates + status change |
+| `post_incident_update` | write | workflows incident updates, status change, status pages to show it on |
 | `set_monitor_paused` | write | api healthcheck / heartbeat monitor update |
 | `trigger_check` | write | api healthcheck trigger |
 | `schedule_maintenance` | write | workflows maintenances |
