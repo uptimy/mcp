@@ -15,7 +15,7 @@ func TestPlanErrorsReadAsPlanErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 	err := New(srv.URL, srv.URL, srv.URL, srv.URL).Do(context.Background(), "upt_x", Reports, http.MethodGet, "/v1/api/reports/range", nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "paid plan") {
+	if err == nil || !strings.Contains(err.Error(), "higher plan") {
 		t.Fatalf("got %v, want a plan error", err)
 	}
 	if e, ok := err.(*Error); !ok || e.Code != "FEATURE_NOT_AVAILABLE.400" {

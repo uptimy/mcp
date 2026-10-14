@@ -153,7 +153,7 @@ type reportData struct {
 
 type getReportIn struct {
 	Report string `json:"report,omitempty" jsonschema:"report name or UUID from list_reports (default: the workspace's report covering every monitor)"`
-	Period string `json:"period,omitempty" jsonschema:"last_7_days, last_30_days (default), last_90_days, last_week (the latest sent weekly report, free plans too), this_week, month, quarter or range"`
+	Period string `json:"period,omitempty" jsonschema:"last_7_days, last_30_days (default), last_90_days, last_week (the latest sent weekly report, every plan), this_week, month, quarter or range"`
 	Start  string `json:"start,omitempty" jsonschema:"month or quarter: its first day, YYYY-MM-DD (default: the current one)"`
 	From   string `json:"from,omitempty" jsonschema:"range: first day, YYYY-MM-DD"`
 	To     string `json:"to,omitempty" jsonschema:"range: last day (included), YYYY-MM-DD"`

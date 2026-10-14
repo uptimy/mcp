@@ -50,7 +50,7 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e.Code == "FEATURE_NOT_AVAILABLE.400" {
-		return "not available on this workspace's plan: it needs a paid plan (upgrade in the Uptimy app)"
+		return "not available on this workspace's plan: it needs a higher plan (upgrade in the Uptimy app)"
 	}
 	if e.Message == "" {
 		return fmt.Sprintf("HTTP %d", e.StatusCode)
