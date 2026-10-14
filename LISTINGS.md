@@ -56,7 +56,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 
 **Auth, for forms that ask:** OAuth 2.1 with dynamic client registration (RFC 7591) and PKCE S256. Protected resource metadata at `https://mcp.upti.my/.well-known/oauth-protected-resource/mcp`; authorization server `https://api.upti.my` (RFC 8414 metadata, RFC 9207 `iss`). Any HTTPS redirect URI can register, plus loopback `http://localhost:<port>` and `http://127.0.0.1:<port>`, so Claude, ChatGPT and Cursor callbacks need no allowlisting. The server also accepts an API key as a Bearer header.
 
-**Tools:** 12. Read: `get_status_overview`, `get_monitor`, `get_monitor_metrics`, `list_incidents`, `get_incident`, `get_dependencies`. Write: `create_incident`, `post_incident_update`, `schedule_maintenance` (these three can publish to public status pages, so they're marked open-world), `set_monitor_paused` and `follow_dependency` (destructive, idempotent: they can turn monitoring or a follow off), `trigger_check`. Every tool has a title and explicit read-only, destructive and open-world hints; a test in `internal/server` keeps it that way.
+**Tools:** 14. Read: `get_status_overview`, `get_monitor`, `get_monitor_metrics`, `list_incidents`, `get_incident`, `get_dependencies`, `list_reports`, `get_uptime_report`. Write: `create_incident`, `post_incident_update`, `schedule_maintenance` (these three can publish to public status pages, so they're marked open-world), `set_monitor_paused` and `follow_dependency` (destructive, idempotent: they can turn monitoring or a follow off), `trigger_check`. Every tool has a title and explicit read-only, destructive and open-world hints; a test in `internal/server` keeps it that way.
 
 ## Official MCP Registry
 

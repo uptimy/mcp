@@ -17,13 +17,15 @@ import (
 )
 
 // Service picks which backend a request goes to. Incidents and maintenances
-// live on workflows, heartbeats on the heartbeat service, everything else on api.
+// live on workflows, heartbeats on the heartbeat service, uptime reports on
+// the reports service, everything else on api.
 type Service int
 
 const (
 	API Service = iota
 	Workflows
 	Heartbeats
+	Reports
 )
 
 type Client struct {
@@ -31,20 +33,25 @@ type Client struct {
 	base map[Service]string
 }
 
-func New(apiURL, workflowsURL, heartbeatsURL string) *Client {
+func New(apiURL, workflowsURL, heartbeatsURL, reportsURL string) *Client {
 	return &Client{
 		http: &http.Client{Timeout: 30 * time.Second},
-		base: map[Service]string{API: apiURL, Workflows: workflowsURL, Heartbeats: heartbeatsURL},
+		base: map[Service]string{API: apiURL, Workflows: workflowsURL, Heartbeats: heartbeatsURL, Reports: reportsURL},
 	}
 }
 
-// Error is a non-2xx answer from a service.
+// Error is a non-2xx answer from a service. Code is the service's error code
+// when it sends one (e.g. FEATURE_NOT_AVAILABLE.400).
 type Error struct {
 	StatusCode int
+	Code       string
 	Message    string
 }
 
 func (e *Error) Error() string {
+	if e.Code == "FEATURE_NOT_AVAILABLE.400" {
+		return "not available on this workspace's plan: it needs a paid plan (upgrade in the Uptimy app)"
+	}
 	if e.Message == "" {
 		return fmt.Sprintf("HTTP %d", e.StatusCode)
 	}
@@ -92,6 +99,7 @@ func (c *Client) Do(ctx context.Context, key string, svc Service, method, path s
 
 	if resp.StatusCode >= 400 {
 		var e struct {
+			Code    string `json:"code"`
 			Error   string `json:"error"`
 			Message string `json:"message"`
 		}
@@ -100,7 +108,7 @@ func (c *Client) Do(ctx context.Context, key string, svc Service, method, path s
 		if msg == "" {
 			msg = e.Message
 		}
-		return &Error{StatusCode: resp.StatusCode, Message: msg}
+		return &Error{StatusCode: resp.StatusCode, Code: e.Code, Message: msg}
 	}
 
 	if out == nil || len(raw) == 0 {

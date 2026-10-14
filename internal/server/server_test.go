@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -80,9 +81,15 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"GET /v1/public/services/github": `{"slug":"github","name":"GitHub","workspaceId":369,"status":"degraded","probes":[
 			{"key":"website","label":"Website","meaning":"github.com is unreachable","applicationUuid":"p-web","status":"operational","uptime":{"d1":100,"d7":99.9,"d30":99.8}},
 			{"key":"api","label":"API","meaning":"api.github.com errors","applicationUuid":"p-api","status":"degraded","uptime":{"d1":97.1,"d7":99.2,"d30":99.5}}]}`,
-		"GET /v1/api/source-follows/":       `{"results":[{"sourceWorkspaceId":369,"sourceUuid":"p-api"}]}`,
-		"PUT /v1/api/source-follows/":       `{"results":[]}`,
-		"DELETE /v1/api/source-follows/369": `{}`,
+		"GET /v1/api/reports/definitions": `{"results":[
+			{"uuid":"def-all","name":"All monitors","isDefault":true,"scopeType":"workspace","monitorUuids":null,"slaTarget":99.9,"cadence":"weekly","sendDay":1,"sendHour":9,"sendMinute":0,"sendTimezone":"UTC","emailEnabled":true,"recipients":["ops@acme.test"]},
+			{"uuid":"00000000-0000-0000-0000-00000000acme","name":"Acme","isDefault":false,"scopeType":"monitors","monitorUuids":["app-down"],"slaTarget":99.5,"cadence":"monthly","sendDay":1,"sendHour":9,"sendMinute":0,"sendTimezone":"Europe/Sarajevo","emailEnabled":true,"recipients":["cto@acme.test","me@agency.test"]}]}`,
+		"GET /v1/api/reports/periods":           `{"timezone":"UTC","weeks":[{"periodStart":"2026-10-05"}]}`,
+		"GET /v1/api/reports/range":             reportJSON,
+		"GET /v1/api/reports/weekly/2026-10-05": reportJSON,
+		"GET /v1/api/source-follows/":           `{"results":[{"sourceWorkspaceId":369,"sourceUuid":"p-api"}]}`,
+		"PUT /v1/api/source-follows/":           `{"results":[]}`,
+		"DELETE /v1/api/source-follows/369":     `{}`,
 	}[r.Method+" "+r.URL.Path]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -91,6 +98,19 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = io.WriteString(w, `{"data":`+data+`}`)
 }
+
+const reportJSON = `{"live":true,"methodology":"Availability is the share of monitored time a service wasn't down.","report":{
+	"period":{"type":"custom","start":"2026-09-15","end":"2026-10-15","timezone":"UTC"},"slaTarget":99.9,
+	"overall":{"availability":99.8,"downtimeSeconds":5400,"slaMet":false,"trend":-0.1},
+	"heartbeats":{"count":1,"missedCheckins":2,"checkinRate":93.333},
+	"monitors":[
+		{"uuid":"app-ok","kind":"healthcheck","name":"Website","availability":100,"downtimeSeconds":0,"p95LatencyMs":120},
+		{"uuid":"app-down","kind":"healthcheck","name":"Checkout API","availability":99.6,"downtimeSeconds":5400,"p95LatencyMs":800,"slowDays":3},
+		{"uuid":"hb-1","kind":"heartbeat","name":"Nightly backup","availability":100,"downtimeSeconds":0,"missedCheckins":2}],
+	"incidents":{"count":2,"resolved":1,"mttrSeconds":3600,"list":[
+		{"title":"Checkout API is down","monitorUuid":"app-down","startedAt":"2026-10-01T10:00:00Z","resolvedAt":"2026-10-01T11:00:00Z","errorClass":"tls","regions":["Frankfurt","Singapore"]},
+		{"title":"Checkout API is down","monitorUuid":"app-down","startedAt":"2026-10-14T10:00:00Z","resolvedAt":null}]},
+	"maintenance":[{"title":"DB upgrade","start":"2026-10-06T22:00:00Z","end":"2026-10-06T23:00:00Z","seconds":3600,"monitors":["Checkout API"],"addedAfterStart":false}]}}`
 
 func (f *fakeUpstream) lastQuery(path string) url.Values {
 	f.mu.Lock()
@@ -117,7 +137,7 @@ func setup(t *testing.T) (*mcp.ClientSession, *fakeUpstream, string) {
 	fake := &fakeUpstream{writes: map[string]map[string]any{}}
 	up := httptest.NewServer(fake)
 	t.Cleanup(up.Close)
-	srv := httptest.NewServer(server.New(upstream.New(up.URL, up.URL, up.URL), server.Config{
+	srv := httptest.NewServer(server.New(upstream.New(up.URL, up.URL, up.URL, up.URL), server.Config{
 		PublicURL:           "https://mcp.upti.my",
 		AuthorizationServer: "https://api.upti.my",
 		PublicHeartbeatsURL: "https://heartbeats.upti.my",
@@ -151,6 +171,19 @@ func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any)
 	b, _ := json.Marshal(res.StructuredContent)
 	_ = json.Unmarshal(b, &out)
 	return out
+}
+
+// callErr calls a tool that must fail and returns its error text.
+func callErr(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) string {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if !res.IsError {
+		t.Fatalf("%s: want a tool error", name)
+	}
+	return res.Content[0].(*mcp.TextContent).Text
 }
 
 func TestRejectsMissingAndInvalidKeys(t *testing.T) {
@@ -202,8 +235,8 @@ func TestListsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 12 {
-		t.Errorf("got %d tools, want 12", len(res.Tools))
+	if len(res.Tools) != 14 {
+		t.Errorf("got %d tools, want 14", len(res.Tools))
 	}
 	// Directory reviews (Claude, ChatGPT) require a title and explicit
 	// read-only, destructive and open-world hints on every tool.
@@ -388,7 +421,7 @@ func TestKeyIsVerifiedOncePerSession(t *testing.T) {
 }
 
 func TestServesOpenAIAppsChallengeOnlyWhenSet(t *testing.T) {
-	up := upstream.New("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1")
+	up := upstream.New("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1")
 	for token, want := range map[string]int{"": http.StatusNotFound, "tok-123": http.StatusOK} {
 		srv := httptest.NewServer(server.New(up, server.Config{PublicURL: "https://mcp.upti.my", AuthorizationServer: "https://api.upti.my", OpenAIAppsChallenge: token}))
 		resp, err := http.Get(srv.URL + "/.well-known/openai-apps-challenge")
@@ -447,5 +480,45 @@ func TestFollowDependency(t *testing.T) {
 	res, _ := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "follow_dependency", Arguments: map[string]any{"slug": "github", "follow": true, "probes": []string{"nope"}}})
 	if !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "website, api") {
 		t.Errorf("unknown probe should list the real ones: %+v", res)
+	}
+}
+
+func TestUptimeReport(t *testing.T) {
+	cs, up, _ := setup(t)
+
+	reports := call(t, cs, "list_reports", map[string]any{})
+	list := reports["reports"].([]any)
+	if len(list) != 2 || list[1].(map[string]any)["covers"] != "1 chosen monitors" || list[1].(map[string]any)["schedule"] != "monthly, sent day 1 at 09:00 Europe/Sarajevo" {
+		t.Fatalf("list_reports: %+v", list)
+	}
+
+	out := call(t, cs, "get_uptime_report", map[string]any{})
+	q := up.lastQuery("/v1/api/reports/range")
+	today := time.Now().UTC().Format("2006-01-02")
+	if q.Get("to") != today || q.Get("from") != time.Now().UTC().AddDate(0, 0, -29).Format("2006-01-02") || q.Get("definition") != "" {
+		t.Fatalf("default is the last 30 days of the default report, got %v", q)
+	}
+	if out["availabilityPercent"] != 99.8 || out["slaMet"] != false || out["downtimeMinutes"] != 90.0 || out["inProgress"] != true {
+		t.Fatalf("summary: %+v", out)
+	}
+	monitors := out["monitors"].([]any)
+	if len(monitors) != 2 || monitors[0].(map[string]any)["name"] != "Checkout API" || monitors[0].(map[string]any)["slowDays"] != 3.0 {
+		t.Fatalf("service monitors worst first, heartbeats left out: %+v", monitors)
+	}
+	longest := out["longestIncidents"].([]any)
+	if longest[0].(map[string]any)["durationMinutes"] != 60.0 || longest[0].(map[string]any)["cause"] != "tls" || longest[1].(map[string]any)["ongoing"] != true {
+		t.Fatalf("incidents: %+v", longest)
+	}
+	if len(out["plannedMaintenance"].([]any)) != 1 || out["heartbeatCheckinRatePercent"] != 93.333 {
+		t.Fatalf("maintenance and heartbeats: %+v", out)
+	}
+
+	// By name, for one week.
+	call(t, cs, "get_uptime_report", map[string]any{"report": "acme", "period": "last_week"})
+	if q := up.lastQuery("/v1/api/reports/weekly/2026-10-05"); q.Get("definition") != "00000000-0000-0000-0000-00000000acme" {
+		t.Fatalf("report by name: %v", q)
+	}
+	if res := callErr(t, cs, "get_uptime_report", map[string]any{"report": "Globex"}); !strings.Contains(res, "no report named") {
+		t.Fatalf("unknown report: %s", res)
 	}
 }

@@ -1,8 +1,8 @@
 # upti.my-mcp 
 
-Uptimy's remote MCP server, at `https://mcp.upti.my/mcp`. It lets AI assistants check what is down, read uptime and latency, run incidents and schedule maintenance.
+Uptimy's remote MCP server, at `https://mcp.upti.my/mcp`. It lets AI assistants check what is down, read uptime and latency and uptime reports against SLA targets, run incidents and schedule maintenance.
 
-It is a stateless gateway with no database or secrets of its own. Each request carries the caller's own `upt_` API key, which is forwarded to the same `/v1/api/*` routes [uptimyctl](../uptimyctl) uses. Incidents and maintenances go to workflows, heartbeats to the heartbeat service, and everything else to api. Responses are trimmed before they reach the model; for example, the raw healthcheck list carries every monitor's daily rollups.
+It is a stateless gateway with no database or secrets of its own. Each request carries the caller's own `upt_` API key, which is forwarded to the same `/v1/api/*` routes [uptimyctl](../uptimyctl) uses. Incidents and maintenances go to workflows, heartbeats to the heartbeat service, uptime reports to the reports service (`REPORTS_URL`), and everything else to api. Responses are trimmed before they reach the model; for example, the raw healthcheck list carries every monitor's daily rollups.
 
 ## Tools
 
@@ -14,6 +14,8 @@ It is a stateless gateway with no database or secrets of its own. Each request c
 | `list_incidents` | read | workflows incidents |
 | `get_incident` | read | workflows incident with timeline |
 | `get_dependencies` | read | api public services catalog + workflows source follows |
+| `list_reports` | read | reports definitions |
+| `get_uptime_report` | read | reports range / month / quarter / weekly / live report, trimmed to the summary, monitors worst first, longest incidents, maintenance |
 | `create_incident` | write | workflows incidents |
 | `post_incident_update` | write | workflows incident updates, status change, status pages to show it on |
 | `set_monitor_paused` | write | api healthcheck / heartbeat monitor update |

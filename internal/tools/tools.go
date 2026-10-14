@@ -64,6 +64,20 @@ func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) 
 	}, t.getIncident)
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "list_reports",
+		Title:       "List uptime reports",
+		Description: "The workspace's uptime reports: what each covers (every monitor, or chosen ones, e.g. one client's), its SLA target and its email schedule. Pass a report's name to get_uptime_report.",
+		Annotations: readOnly(),
+	}, t.listReports)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "get_uptime_report",
+		Title:       "Uptime report",
+		Description: "Availability against the SLA target for a period: the last 7, 30 (default) or 90 days, the last sent week, this week, a calendar month or quarter, or any range of days. Returns downtime, incidents and time to resolve, each monitor's availability worst first, the longest incidents with their causes, and planned maintenance (not counted as downtime). Uptime is time-based: downtime is the time an automatic incident was open. On free plans only last_week (the weekly report) is available.",
+		Annotations: readOnly(),
+	}, t.getUptimeReport)
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_dependencies",
 		Title:       "Third-party dependencies",
 		Description: "Third-party services Uptimy measures independently (GitHub, Cloudflare, Stripe, ...) and which ones this workspace follows. Without slug: every service with its status and 30-day uptime, followed ones first. With slug: that service's probes (e.g. website, API, git operations), what each one means, its status and uptime, and whether it's followed. Use it to tell whether a problem is yours or a provider's.",
