@@ -221,6 +221,8 @@ type heartbeat struct {
 	Name              string         `json:"name"`
 	Description       string         `json:"description"`
 	IntervalSeconds   int            `json:"intervalSeconds"`
+	Cron              string         `json:"cron"`
+	Timezone          string         `json:"timezone"`
 	GraceSeconds      int            `json:"graceSeconds"`
 	FailureThreshold  any            `json:"failureThreshold"`
 	RecoveryThreshold any            `json:"recoveryThreshold"`

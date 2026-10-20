@@ -17,13 +17,16 @@ type uuidIn struct {
 }
 
 type monitorOut struct {
-	UUID            string `json:"uuid"`
-	Name            string `json:"name"`
-	Kind            string `json:"kind"`
-	Description     string `json:"description,omitempty"`
-	Status          string `json:"status"`
-	StatusSince     string `json:"statusSince,omitempty"`
-	IntervalSeconds int    `json:"intervalSeconds"`
+	UUID        string `json:"uuid"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"`
+	StatusSince string `json:"statusSince,omitempty"`
+	// A heartbeat on a cron schedule has Cron and Timezone instead.
+	IntervalSeconds int    `json:"intervalSeconds,omitempty"`
+	Cron            string `json:"cron,omitempty"`
+	Timezone        string `json:"timezone,omitempty"`
 	// Checks only.
 	Type           string         `json:"type,omitempty"`
 	TimeoutSeconds int            `json:"timeoutSeconds,omitempty"`
@@ -59,7 +62,7 @@ func (t *toolset) getMonitor(ctx context.Context, req *mcp.CallToolRequest, in u
 	h := m.heartbeat
 	out := monitorOut{
 		UUID: h.UUID, Name: h.Name, Kind: "heartbeat", Description: h.Description, Status: h.status(),
-		IntervalSeconds: h.IntervalSeconds, GraceSeconds: h.GraceSeconds, PingURL: t.pingURL(*h),
+		IntervalSeconds: h.IntervalSeconds, Cron: h.Cron, Timezone: h.Timezone, GraceSeconds: h.GraceSeconds, PingURL: t.pingURL(*h),
 	}
 	if s := h.StatusSnapshot; s != nil {
 		if s.LastTransitionAt != nil {
@@ -131,6 +134,9 @@ func (t *toolset) setMonitorPaused(ctx context.Context, req *mcp.CallToolRequest
 	body := map[string]any{
 		"paused": in.Paused, "name": h.Name, "description": h.Description,
 		"intervalSeconds": h.IntervalSeconds, "graceSeconds": h.GraceSeconds,
+	}
+	if h.Cron != "" {
+		body["cron"], body["timezone"] = h.Cron, h.Timezone
 	}
 	for k, v := range map[string]any{"failureThreshold": h.FailureThreshold, "recoveryThreshold": h.RecoveryThreshold, "enforceOrder": h.EnforceOrder, "steps": h.Steps} {
 		if v != nil {
