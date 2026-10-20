@@ -65,16 +65,18 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"GET /v1/api/healthchecks/hc-down/analytics/executions": `{"results":[
 			{"checkedAt":"2026-10-06T10:00:10Z","schedulerUuid":"s-fra","success":false,"responseTimeMs":300,"errorMessage":"HTTP 503"},
 			{"checkedAt":"2026-10-06T10:00:40Z","schedulerUuid":"s-fra","success":true,"responseTimeMs":100}]}`,
-		"GET /v1/api/heartbeat-monitors/":       `{"results":[{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"statusSnapshot":{"status":"Down","lastPingAt":"2026-10-05T01:00:00Z"}}]}`,
-		"GET /v1/api/heartbeat-monitors/hb-1":   `{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"graceSeconds":600,"credential":{"publicId":"pub123"},"steps":[],"statusSnapshot":{"status":"Down"}}`,
-		"GET /v1/api/incidents/":                `{"results":[{"uuid":"inc-1","title":"Checkout API is down","severity":"high","status":"Created","startedAt":"2026-10-06T10:00:00Z","incidentStatusPages":[{"statusPageUuid":"sp-1"}]}],"paginator":{"total":1}}`,
-		"GET /v1/api/incidents/inc-1":           `{"uuid":"inc-1","title":"Checkout API is down","description":"Checkout failing","severity":"high","status":"Investigating","startedAt":"2026-10-06T10:00:00Z","incidentUpdates":[{"message":"Looking into it","public":true,"createdAt":"2026-10-06T10:05:00Z","user":{"firstName":"Ada","lastName":"L"}}],"statusHistory":[{"fromStatus":"Created","toStatus":"Investigating","changedAt":"2026-10-06T10:05:00Z"}],"incidentStatusPages":[{"statusPageUuid":"sp-1"}]}`,
-		"GET /v1/api/status-pages/":             `{"results":[{"uuid":"sp-1","name":"Acme Status","slug":"acme"}]}`,
-		"POST /v1/api/incidents/inc-1/updates/": `{}`,
-		"PUT /v1/api/incidents/inc-1":           `{}`,
-		"PUT /v1/api/healthchecks/hc-down":      `{}`,
-		"PUT /v1/api/heartbeat-monitors/hb-1":   `{}`,
-		"POST /v1/api/maintenances/":            `{"uuid":"m-1","title":"DB upgrade","status":"Scheduled","startAt":"2026-10-06T22:00:00Z","finishAt":"2026-10-06T23:00:00Z"}`,
+		"GET /v1/api/heartbeat-monitors/":        `{"results":[{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"statusSnapshot":{"status":"Down","lastPingAt":"2026-10-05T01:00:00Z"}}]}`,
+		"GET /v1/api/heartbeat-monitors/hb-1":    `{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"graceSeconds":600,"credential":{"publicId":"pub123"},"steps":[],"statusSnapshot":{"status":"Down"}}`,
+		"GET /v1/api/heartbeat-monitors/hb-cron": `{"uuid":"hb-cron","name":"Weekday report","intervalSeconds":0,"cron":"0 9 * * 1-5","timezone":"Europe/Berlin","graceSeconds":600,"credential":{"publicId":"pub456"},"steps":[],"statusSnapshot":{"status":"Healthy"}}`,
+		"GET /v1/api/incidents/":                 `{"results":[{"uuid":"inc-1","title":"Checkout API is down","severity":"high","status":"Created","startedAt":"2026-10-06T10:00:00Z","incidentStatusPages":[{"statusPageUuid":"sp-1"}]}],"paginator":{"total":1}}`,
+		"GET /v1/api/incidents/inc-1":            `{"uuid":"inc-1","title":"Checkout API is down","description":"Checkout failing","severity":"high","status":"Investigating","startedAt":"2026-10-06T10:00:00Z","incidentUpdates":[{"message":"Looking into it","public":true,"createdAt":"2026-10-06T10:05:00Z","user":{"firstName":"Ada","lastName":"L"}}],"statusHistory":[{"fromStatus":"Created","toStatus":"Investigating","changedAt":"2026-10-06T10:05:00Z"}],"incidentStatusPages":[{"statusPageUuid":"sp-1"}]}`,
+		"GET /v1/api/status-pages/":              `{"results":[{"uuid":"sp-1","name":"Acme Status","slug":"acme"}]}`,
+		"POST /v1/api/incidents/inc-1/updates/":  `{}`,
+		"PUT /v1/api/incidents/inc-1":            `{}`,
+		"PUT /v1/api/healthchecks/hc-down":       `{}`,
+		"PUT /v1/api/heartbeat-monitors/hb-1":    `{}`,
+		"PUT /v1/api/heartbeat-monitors/hb-cron": `{}`,
+		"POST /v1/api/maintenances/":             `{"uuid":"m-1","title":"DB upgrade","status":"Scheduled","startAt":"2026-10-06T22:00:00Z","finishAt":"2026-10-06T23:00:00Z"}`,
 		"GET /v1/public/services": `{"services":[
 			{"slug":"github","name":"GitHub","workspaceId":369,"status":"degraded","probeCount":2,"uptime30":99.4},
 			{"slug":"stripe","name":"Stripe","workspaceId":370,"status":"operational","probeCount":3,"uptime30":99.99}]}`,
@@ -377,6 +379,19 @@ func TestSetMonitorPaused(t *testing.T) {
 	call(t, cs, "set_monitor_paused", map[string]any{"uuid": "hb-1", "paused": true})
 	if hb := fake.write("PUT /v1/api/heartbeat-monitors/hb-1"); hb["paused"] != true || hb["graceSeconds"] != 600.0 {
 		t.Errorf("heartbeat body = %v", hb)
+	}
+
+	// A cron heartbeat keeps its schedule when paused.
+	call(t, cs, "set_monitor_paused", map[string]any{"uuid": "hb-cron", "paused": true})
+	if hb := fake.write("PUT /v1/api/heartbeat-monitors/hb-cron"); hb["cron"] != "0 9 * * 1-5" || hb["timezone"] != "Europe/Berlin" || hb["intervalSeconds"] != 0.0 {
+		t.Errorf("cron heartbeat body = %v", hb)
+	}
+	got := call(t, cs, "get_monitor", map[string]any{"uuid": "hb-cron"})
+	if got["cron"] != "0 9 * * 1-5" || got["timezone"] != "Europe/Berlin" {
+		t.Errorf("get_monitor = %v: want the cron schedule", got)
+	}
+	if _, ok := got["intervalSeconds"]; ok {
+		t.Errorf("get_monitor = %v: a cron heartbeat has no interval", got)
 	}
 }
 
