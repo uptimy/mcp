@@ -28,6 +28,7 @@ func env(key, def string) string {
 }
 
 func main() {
+	slog.SetDefault(server.NewLogger(os.Stdout))
 	up := upstream.New(
 		env("API_BASE_URL", "https://api.upti.my"),
 		env("WORKFLOWS_URL", "https://workflows.upti.my"),
@@ -51,7 +52,7 @@ func main() {
 	go func() {
 		slog.Info("listening", "addr", srv.Addr, "version", version)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("server failed", "err", err)
+			slog.Error("server failed", "error", err.Error())
 			os.Exit(1)
 		}
 	}()
@@ -60,6 +61,6 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdown); err != nil {
-		slog.Error("shutdown", "err", err)
+		slog.Error("shutdown", "error", err.Error())
 	}
 }

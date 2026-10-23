@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -43,6 +44,7 @@ type Config struct {
 func New(up *upstream.Client, cfg Config) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "uptimy", Title: "Uptimy", Version: cfg.Version}, &mcp.ServerOptions{Instructions: instructions})
 	tools.Register(srv, up, cfg.PublicHeartbeatsURL)
+	srv.AddReceivingMiddleware(logToolCalls)
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv },
@@ -80,7 +82,7 @@ func New(up *upstream.Client, cfg Config) http.Handler {
 	}
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	return mux
+	return logRequests(mux)
 }
 
 // cors lets browser-based clients (e.g. MCP Inspector) call /mcp. Any origin
@@ -140,6 +142,9 @@ func verifier(up *upstream.Client) auth.TokenVerifier {
 			return nil, auth.ErrInvalidToken
 		}
 		if err != nil {
+			// The API couldn't answer (not a refused key): the client sees
+			// a failure, so record why.
+			slog.Error("key verification failed", "error", err.Error())
 			return nil, err
 		}
 		info := &auth.TokenInfo{
