@@ -23,10 +23,14 @@ type monitorOut struct {
 	Description string `json:"description,omitempty"`
 	Status      string `json:"status"`
 	StatusSince string `json:"statusSince,omitempty"`
-	// A heartbeat on a cron schedule has Cron and Timezone instead.
+	// A heartbeat on a cron schedule has Cron and Timezone instead, and one
+	// that expects no run has NoSchedule.
 	IntervalSeconds int    `json:"intervalSeconds,omitempty"`
 	Cron            string `json:"cron,omitempty"`
 	Timezone        string `json:"timezone,omitempty"`
+	NoSchedule      bool   `json:"noSchedule,omitempty"`
+	// MaxRunSeconds: with no schedule, how long a run may take. 0: no limit.
+	MaxRunSeconds int `json:"maxRunSeconds,omitempty"`
 	// Checks only.
 	Type           string         `json:"type,omitempty"`
 	TimeoutSeconds int            `json:"timeoutSeconds,omitempty"`
@@ -62,7 +66,7 @@ func (t *toolset) getMonitor(ctx context.Context, req *mcp.CallToolRequest, in u
 	h := m.heartbeat
 	out := monitorOut{
 		UUID: h.UUID, Name: h.Name, Kind: "heartbeat", Description: h.Description, Status: h.status(),
-		IntervalSeconds: h.IntervalSeconds, Cron: h.Cron, Timezone: h.Timezone, GraceSeconds: h.GraceSeconds, PingURL: t.pingURL(*h),
+		IntervalSeconds: h.IntervalSeconds, Cron: h.Cron, Timezone: h.Timezone, NoSchedule: h.NoSchedule, MaxRunSeconds: h.MaxRunSeconds, GraceSeconds: h.GraceSeconds, PingURL: t.pingURL(*h),
 	}
 	if s := h.StatusSnapshot; s != nil {
 		if s.LastTransitionAt != nil {

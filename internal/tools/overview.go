@@ -21,10 +21,12 @@ type overviewMonitor struct {
 	Type   string `json:"type,omitempty"`
 	Status string `json:"status"`
 	Since  string `json:"since,omitempty"`
-	// A heartbeat on a cron schedule has Cron and Timezone instead.
+	// A heartbeat on a cron schedule has Cron and Timezone instead, and one
+	// that expects no run has NoSchedule.
 	IntervalSeconds int      `json:"intervalSeconds,omitempty"`
 	Cron            string   `json:"cron,omitempty"`
 	Timezone        string   `json:"timezone,omitempty"`
+	NoSchedule      bool     `json:"noSchedule,omitempty"`
 	Regions         []string `json:"regions,omitempty"`
 	LastCheckIn     string   `json:"lastCheckIn,omitempty"`
 }
@@ -127,7 +129,7 @@ func buildOverview(ws string, hcs []healthcheck, hbs []heartbeat, incidents []in
 		out.Monitors = append(out.Monitors, m)
 	}
 	for _, h := range hbs {
-		m := overviewMonitor{UUID: h.UUID, Name: h.Name, Kind: "heartbeat", Status: h.status(), IntervalSeconds: h.IntervalSeconds, Cron: h.Cron, Timezone: h.Timezone}
+		m := overviewMonitor{UUID: h.UUID, Name: h.Name, Kind: "heartbeat", Status: h.status(), IntervalSeconds: h.IntervalSeconds, Cron: h.Cron, Timezone: h.Timezone, NoSchedule: h.NoSchedule}
 		if s := h.StatusSnapshot; s != nil {
 			if s.LastPingAt != nil {
 				m.LastCheckIn = *s.LastPingAt

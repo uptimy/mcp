@@ -223,6 +223,8 @@ type heartbeat struct {
 	IntervalSeconds   int            `json:"intervalSeconds"`
 	Cron              string         `json:"cron"`
 	Timezone          string         `json:"timezone"`
+	NoSchedule        bool           `json:"noSchedule"`
+	MaxRunSeconds     int            `json:"maxRunSeconds"`
 	GraceSeconds      int            `json:"graceSeconds"`
 	FailureThreshold  any            `json:"failureThreshold"`
 	RecoveryThreshold any            `json:"recoveryThreshold"`
