@@ -22,18 +22,20 @@ jobs:
     runs-on: ubuntu-24.04
     name: Build and Deploy
     steps:
-      - name: Notify Slack of Build
-        id: slack-build
-        uses: slackapi/slack-github-action@v4
-        with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_ID }}
-            text: "Build started: ${{ github.repository }}"
-            attachments:
-              - color: "#0037FF"
-                text: "*Build STARTING*\n- Actor: ${{ github.actor }}\n- Job Tag: ${{ github.sha }}\n- Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - name: Notify Discord of Build
+        id: discord-build
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_BUILDS_WEBHOOK_URL }}
+          REPOSITORY: ${{ github.repository }}
+          DESCRIPTION: "**Actor:** ${{ github.actor }}\n**Commit:** `${{ github.sha }}`"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # ?wait=true returns the message, so its id can be used to edit it in place
+        # when the deploy finishes.
+        run: |
+          jq -n --arg title "🔨 Build started: $REPOSITORY" --arg description "$DESCRIPTION" --arg url "$RUN_URL" \
+            '{embeds: [{title: $title, description: $description, url: $url, color: 14335}]}' |
+            curl -fsS -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL?wait=true" |
+            jq -r '"id=\(.id)"' >> "$GITHUB_OUTPUT"
 
       - name: Condition for commit if empty
         if: "github.event.inputs.commit == ''"
@@ -99,30 +101,21 @@ jobs:
             sleep $((RANDOM % 8 + 2))
             git pull --rebase origin master
           done
-      - name: Notify Slack of Success
-        if: success() && steps.slack-build.outputs.ts
-        uses: slackapi/slack-github-action@v4
-        with:
-          method: chat.update
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_ID }}
-            ts: "${{ steps.slack-build.outputs.ts }}"
-            text: "Deploy completed: ${{ github.repository }}"
-            attachments:
-              - color: "good"
-                text: "*Deploy COMPLETED*\n- Actor: ${{ github.actor }}\n- Job Tag: ${{ github.sha }}\n- Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-      - name: Notify Slack of Failure
-        if: failure() && steps.slack-build.outputs.ts
-        uses: slackapi/slack-github-action@v4
-        with:
-          method: chat.update
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_ID }}
-            ts: "${{ steps.slack-build.outputs.ts }}"
-            text: "Deploy failed: ${{ github.repository }}"
-            attachments:
-              - color: "danger"
-                text: "*Deploy FAILED*\n- Actor: ${{ github.actor }}\n- Job Tag: ${{ github.sha }}\n- Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - name: Notify Discord of Result
+        if: always() && steps.discord-build.outputs.id
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_BUILDS_WEBHOOK_URL }}
+          REPOSITORY: ${{ github.repository }}
+          DESCRIPTION: "**Actor:** ${{ github.actor }}\n**Commit:** `${{ github.sha }}`"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MESSAGE_ID: ${{ steps.discord-build.outputs.id }}
+          STATUS: ${{ job.status }}
+        run: |
+          case "$STATUS" in
+            success) title="✅ Deploy completed: $REPOSITORY"; color=3061894 ;;
+            cancelled) title="⚪ Deploy cancelled: $REPOSITORY"; color=10070709 ;;
+            *) title="❌ Deploy failed: $REPOSITORY"; color=10682880 ;;
+          esac
+          jq -n --arg title "$title" --arg description "$DESCRIPTION" --arg url "$RUN_URL" --argjson color "$color" \
+            '{embeds: [{title: $title, description: $description, url: $url, color: $color}]}' |
+            curl -fsS -X PATCH -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL/messages/$MESSAGE_ID"
