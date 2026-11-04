@@ -84,7 +84,7 @@ func (t *toolset) pingURL(h heartbeat) string {
 	if id == "" {
 		return ""
 	}
-	return strings.TrimRight(t.publicHeartbeatsURL, "/") + "/v1/monitors/" + url.PathEscape(id)
+	return strings.TrimRight(t.pingBaseURL, "/") + "/" + url.PathEscape(id)
 }
 
 type pausedIn struct {

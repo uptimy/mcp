@@ -23,10 +23,10 @@ const (
 )
 
 // Register adds every tool to srv.
-// publicHeartbeatsURL is the public base of heartbeat ping URLs; the upstream
+// pingBaseURL is the public base of heartbeat ping URLs; the upstream
 // client may talk to the heartbeat service over an in-cluster address.
-func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) {
-	t := &toolset{up: up, publicHeartbeatsURL: publicHeartbeatsURL}
+func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
+	t := &toolset{up: up, pingBaseURL: pingBaseURL}
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_status_overview",
@@ -128,8 +128,8 @@ func Register(srv *mcp.Server, up *upstream.Client, publicHeartbeatsURL string) 
 }
 
 type toolset struct {
-	up                  *upstream.Client
-	publicHeartbeatsURL string
+	up          *upstream.Client
+	pingBaseURL string
 }
 
 // Every tool sets all three hints explicitly: directories (Claude, ChatGPT)
