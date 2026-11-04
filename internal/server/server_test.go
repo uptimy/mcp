@@ -142,7 +142,7 @@ func setup(t *testing.T) (*mcp.ClientSession, *fakeUpstream, string) {
 	srv := httptest.NewServer(server.New(upstream.New(up.URL, up.URL, up.URL, up.URL), server.Config{
 		PublicURL:           "https://mcp.upti.my",
 		AuthorizationServer: "https://api.upti.my",
-		PublicHeartbeatsURL: "https://heartbeats.upti.my",
+		PingBaseURL:         "https://ping.upti.my",
 		Version:             "test",
 	}))
 	t.Cleanup(srv.Close)
@@ -291,7 +291,7 @@ func TestGetMonitorRedactsSecretsAndFallsBackToHeartbeat(t *testing.T) {
 	}
 
 	hb := call(t, cs, "get_monitor", map[string]any{"uuid": "hb-1"})
-	if hb["kind"] != "heartbeat" || hb["pingUrl"] != "https://heartbeats.upti.my/v1/monitors/pub123" {
+	if hb["kind"] != "heartbeat" || hb["pingUrl"] != "https://ping.upti.my/pub123" {
 		t.Errorf("heartbeat = %v", hb)
 	}
 }

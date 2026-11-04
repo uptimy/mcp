@@ -31,9 +31,9 @@ type Config struct {
 	// AuthorizationServer issues the OAuth tokens (upt_ keys) this server
 	// accepts, e.g. https://api.upti.my.
 	AuthorizationServer string
-	// PublicHeartbeatsURL is the public base of heartbeat ping URLs.
-	PublicHeartbeatsURL string
-	Version             string
+	// PingBaseURL is the public base of heartbeat ping URLs.
+	PingBaseURL string
+	Version     string
 	// OpenAIAppsChallenge is the domain-verification token from OpenAI's
 	// plugin dashboard, served at /.well-known/openai-apps-challenge. Empty
 	// until a ChatGPT listing is being verified.
@@ -43,7 +43,7 @@ type Config struct {
 // New returns the HTTP handler for the whole service.
 func New(up *upstream.Client, cfg Config) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "uptimy", Title: "Uptimy", Version: cfg.Version}, &mcp.ServerOptions{Instructions: instructions})
-	tools.Register(srv, up, cfg.PublicHeartbeatsURL)
+	tools.Register(srv, up, cfg.PingBaseURL)
 	srv.AddReceivingMiddleware(logToolCalls)
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(

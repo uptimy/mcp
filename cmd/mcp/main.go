@@ -40,7 +40,7 @@ func main() {
 		Handler: server.New(up, server.Config{
 			PublicURL:           env("PUBLIC_URL", "https://mcp.upti.my"),
 			AuthorizationServer: env("AUTHORIZATION_SERVER", "https://api.upti.my"),
-			PublicHeartbeatsURL: env("PUBLIC_HEARTBEATS_URL", "https://heartbeats.upti.my"),
+			PingBaseURL:         env("PING_BASE_URL", "https://ping.upti.my"),
 			Version:             version,
 			OpenAIAppsChallenge: os.Getenv("OPENAI_APPS_CHALLENGE"),
 		}),
