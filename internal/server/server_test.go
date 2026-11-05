@@ -273,14 +273,15 @@ func TestListsTools(t *testing.T) {
 	if len(res.Tools) != 24 {
 		t.Errorf("got %d tools, want 24", len(res.Tools))
 	}
-	// Directory reviews (Claude, ChatGPT) require a title and explicit
+	// Directory reviews (Claude, ChatGPT) require a title (also in the
+	// annotations) and explicit
 	// read-only, destructive and open-world hints on every tool. Open-world:
 	// it can change what public status pages show, or it reaches the internet.
 	publishes := map[string]bool{"create_incident": true, "post_incident_update": true, "schedule_maintenance": true,
 		"create_status_page": true, "add_to_status_page": true, "suggest_monitors": true}
 	for _, tool := range res.Tools {
 		a := tool.Annotations
-		if tool.Title == "" || a == nil || a.DestructiveHint == nil || a.OpenWorldHint == nil {
+		if tool.Title == "" || a == nil || a.Title != tool.Title || a.DestructiveHint == nil || a.OpenWorldHint == nil {
 			t.Errorf("%s: missing title or hints: %+v", tool.Name, a)
 			continue
 		}
