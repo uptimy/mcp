@@ -34,7 +34,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 >
 > Ask what's down right now, how a service's uptime and latency looked over any time range and in each region, or why an incident opened, and the assistant answers from your real checks, including the errors from failed checks. It also sees the third-party services you follow, such as GitHub, Cloudflare or Stripe, so it can tell your problem apart from a provider's. It can also run the incident with you: post timeline updates, move it to a new status up to Resolved, publish updates to your status pages, schedule a maintenance window, pause or resume a monitor, or run a check right away to confirm a fix.
 >
-> You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can see and disconnect at any time under Settings → AI assistants. It can also set monitoring up: scan your domain for what to watch, add monitors and cron job monitors, create status pages, and send alerts to Slack, Teams, email or a webhook. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting or publishing anything public, and there are no tools that delete anything: editing and removing stay in the Uptimy app and CLI.
+> You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can see and revoke at any time under Settings → API Keys. It can also set monitoring up: scan your domain for what to watch, add monitors and cron job monitors, create status pages, and send alerts to Slack, Teams, email or a webhook. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting or publishing anything public, and there are no tools that delete anything: editing and removing stay in the Uptimy app and CLI.
 
 **Starter prompts** (ChatGPT: up to 3, 128 characters each)
 1. Is anything down right now?
@@ -150,7 +150,7 @@ Directories check that the policy covers what the connector does with data; Clau
 
 In order. Steps marked *you* need an account, DNS or a dashboard only you can use.
 
-1. Merge and deploy: api `mcp-connected-assistants` (api_key.source), then app `mcp-ai-assistants` (Settings → AI assistants), then landing `mcp-launch` (docs, blog, privacy policy).
+1. Merge and deploy: api `mcp-connected-assistants` (api_key.source), then app `mcp-ai-assistants` (Connect an AI assistant in Settings → API Keys), then landing `mcp-launch` (docs, blog, privacy policy).
 2. *You:* create the reviewer account (email and password, no 2FA) and populate its workspace: several monitors, one failing, an open incident, a status page.
 3. Run the six write tools against that workspace from a custom connector in Claude, and fix anything that fails.
 4. *You:* add the registry TXT record on `upti.my`, then `mcp-publisher validate` and `mcp-publisher publish` (Official MCP Registry). Glama and PulseMCP pick it up from there.
