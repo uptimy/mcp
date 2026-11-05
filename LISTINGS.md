@@ -7,7 +7,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 | Directory | How | Review | Status |
 |---|---|---|---|
 | Official MCP Registry | `mcp-publisher` + `server.json` (in this repo) | None | Ready: needs the DNS record below, then publish |
-| Claude Connectors Directory | Form at claude.ai/directory/manage | Automated scan, then listed as Community; Anthropic may pick it for Verified review | Text ready; needs the reviewer account, the privacy policy (landing PR) live, and the write tools run once |
+| Claude Connectors Directory | Form at claude.ai/directory/manage | Automated scan, then listed as Community; Anthropic may pick it for Verified review | Text ready and the privacy policy is live; needs the reviewer account and the write tools run once against it |
 | ChatGPT (OpenAI Plugins) | Plugin ZIP at platform.openai.com/plugins | Human | Text and test cases ready; needs business verification, a test account, the domain token and the video |
 | Cursor | cursor.directory (community); Marketplace is invite-only and needs an open-source repo | Manual | "Add to Cursor" link is on the docs page; submit to cursor.directory |
 | GitHub MCP Registry (VS Code) | Email partnerships@github.com | Curated | Needs a decision on a public repo |
@@ -21,25 +21,29 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 **Name:** Uptimy
 
 **One-liner** (Claude: 200 characters max)
-> See what's down, read uptime and latency across regions, and run incidents and status page updates from your assistant.
+> See what's down, read uptime and latency across regions, run incidents and status page updates, and set up monitoring, alerts and reports from your assistant.
 
 **Short description** (ChatGPT: 30 characters max)
 > Uptime and incident monitoring
 
 **Registry description** (100 characters max, in `server.json`)
-> Uptime monitoring and incidents: see what's down, read uptime and latency, post status page updates.
+> Uptime monitoring from your assistant: see what's down, run incidents, set up monitors and reports.
 
 **Description** (Claude: 2,000 characters max; ChatGPT long description: 4,000)
-> Uptimy monitors websites, APIs and cron jobs from several regions, opens incidents when something fails, and runs status pages. This connector brings that into your assistant.
+> Uptimy monitors websites, APIs and cron jobs from several regions, opens incidents when something fails, and runs status pages and uptime reports. This connector brings that into your assistant.
 >
-> Ask what's down right now, how a service's uptime and latency looked over any time range and in each region, or why an incident opened, and the assistant answers from your real checks, including the errors from failed checks. It also sees the third-party services you follow, such as GitHub, Cloudflare or Stripe, so it can tell your problem apart from a provider's. It can also run the incident with you: post timeline updates, move it to a new status up to Resolved, publish updates to your status pages, schedule a maintenance window, pause or resume a monitor, or run a check right away to confirm a fix.
+> Ask what's down right now, how a service's uptime and latency looked over any time range and in each region, why an incident opened, or whether you met your SLA last month, and the assistant answers from your real checks, including the errors from failed checks. It also sees the third-party services you follow, such as GitHub, Cloudflare or Stripe, so it can tell your problem apart from a provider's. It can run the incident with you: post timeline updates, move it to a new status up to Resolved, publish updates to your status pages, schedule a maintenance window, pause or resume a monitor, or run a check right away to confirm a fix.
 >
-> You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can see and revoke at any time under Settings → API Keys. It can also set monitoring up: scan your domain for what to watch, add monitors and cron job monitors, create status pages, and send alerts to Slack, Teams, email or a webhook. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting or publishing anything public, and there are no tools that delete anything: editing and removing stay in the Uptimy app and CLI.
+> It can also set Uptimy up: scan your domain for what to watch, add monitors and cron job monitors, create status pages, send alerts to Slack, Teams, email or a webhook, and add uptime reports, for example one per client, emailed on a schedule.
+>
+> You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can see and revoke at any time under Settings → API Keys. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting or publishing anything public, and there are no tools that delete anything: removing things stays in the Uptimy app and CLI.
 
-**Starter prompts** (ChatGPT: up to 3, 128 characters each)
+**Starter prompts** (ChatGPT: up to 3, 128 characters each; Claude's use cases take all five)
 1. Is anything down right now?
-2. How has my API's latency looked this week, per region?
+2. Set up monitoring for my domain and alert #ops in Slack when something goes down.
 3. Post an update on the open incident: the fix is deployed and we're monitoring.
+4. How has my API's latency looked this week, per region?
+5. Did we meet our SLA last month? Add a monthly report for Acme's monitors and email it to their CTO.
 
 **URLs and contacts**
 
@@ -48,7 +52,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 | Server URL | https://mcp.upti.my/mcp (Streamable HTTP) |
 | Website | https://www.upti.my |
 | Documentation | https://www.upti.my/docs/mcp |
-| Privacy policy | https://www.upti.my/privacy-policy (the section below must be live first) |
+| Privacy policy | https://www.upti.my/privacy-policy |
 | Terms | https://www.upti.my/terms-of-service |
 | Support | support@upti.my |
 | Icon | https://www.upti.my/brand/uptimy-app-icon.png (1024×1024) and `.svg` |
@@ -90,10 +94,10 @@ The portal's steps, in order (checked 2026-11-05):
 5. **Company:** Uptimy, https://www.upti.my, and a primary contact for review updates.
 6. **Authentication:** sign-in required, OAuth. Leave "Anthropic holds the client" empty: dynamic registration covers it.
 7. **Data handling:** the API is our own (first-party); no health data, no sponsored content.
-   - *What data does the connector access?* Monitors and their configuration (request headers, bodies, scripts and fields holding credentials are removed by name before anything is returned), check results and errors, uptime and latency metrics, incidents and their timelines, status pages, maintenance windows.
+   - *What data does the connector access?* Monitors and their configuration (request headers, bodies, scripts and fields holding credentials are removed by name before anything is returned), check results and errors, uptime and latency metrics, incidents and their timelines, status pages, maintenance windows, alerts and the names of connected integrations, uptime reports and their settings (including recipients' email addresses).
    - *Where is it stored?* Nothing is stored by the connector; it's a stateless gateway to Uptimy's API. It logs which tool was called, by which key, when and from which IP. The OAuth sign-in creates an API key in the user's workspace.
-   - *What can it change?* Incidents and their updates, status page posts, maintenance windows, pausing monitors and alerts, following third-party services, running a check, and adding monitors, cron job monitors, status pages and alerts. Nothing can be deleted or edited beyond that.
-8. **Test & launch:** the reviewer account's sign-in (email and password, no 2FA) and a populated workspace: several monitors, at least one failing, an open incident and a status page. Confirm every tool was run as a custom connector: the read tools were run from Claude Code on 2026-10-07; run the six write tools against the reviewer workspace before submitting.
+   - *What can it change?* Incidents and their updates, status page posts, maintenance windows, pausing monitors and alerts, following third-party services, running a check, adding monitors, cron job monitors, status pages, alerts and uptime reports, and changing a report's settings. Nothing can be deleted or edited beyond that.
+8. **Test & launch:** the reviewer account's sign-in (email and password, no 2FA) and a populated workspace: several monitors, at least one failing, an open incident and a status page. Confirm every tool was run as a custom connector: all 24 were run against production on 2026-11-05 (claude.ai and Claude Code); run the write tools against the reviewer workspace once more before submitting.
 9. **Compliance:** seven acknowledgments (directory guidelines, first-party API usage, financial transactions, AI media generation, prompt injection, conversation data collection, public documentation). Uptimy meets each: it calls only its own API, moves no money, generates no media, its tool descriptions only describe the tools, and it reads nothing from the conversation beyond the tool arguments. `suggest_monitors` probes the domain the user names (the same scan as the app's Setup), nothing else.
 
 After submitting, an automated scan lists it as a **Community** connector. Anthropic may escalate it to **Verified** review, where reviewers run each tool. Status and feedback are in the portal; escalations go to mcp-review@anthropic.com.
@@ -101,7 +105,7 @@ After submitting, an automated scan lists it as a **Community** connector. Anthr
 Review risks to settle before submitting:
 
 - **Missing privacy policy means immediate rejection.** The section below is in the landing PR; submit only after it's live.
-- **`destructiveHint`:** the review criteria say `destructiveHint: true` is for "tools that modify or delete data". `post_incident_update` changes an incident's status and can publish to status pages, but is marked non-destructive (it's open-world). Marking it destructive makes Claude ask before every call, which the server instructions already request for public posts. Decide before submitting.
+- **`destructiveHint`:** the review criteria say `destructiveHint: true` is for "tools that modify or delete data". `post_incident_update` changes an incident's status and can publish to status pages, but is marked non-destructive (it's open-world). Marking it destructive makes Claude ask before every call, which the server instructions already request for public posts. Kept as is for the 2026-11 submission; change it if the review asks.
 - Anthropic's docs note that client registration creates a new client per connection; supporting Client ID Metadata Documents (CIMD) is their recommendation for high traffic (follow-up below).
 
 ## ChatGPT (OpenAI Plugins)
@@ -150,13 +154,13 @@ Directories check that the policy covers what the connector does with data; Clau
 
 In order. Steps marked *you* need an account, DNS or a dashboard only you can use.
 
-1. Merge and deploy: api `mcp-connected-assistants` (api_key.source), then app `mcp-ai-assistants` (Connect an AI assistant in Settings → API Keys), then landing `mcp-launch` (docs, blog, privacy policy).
+1. ~~Merge and deploy~~ (done 2026-11-05: api_key.source, Connect an AI assistant in Settings → API Keys, docs, blog, privacy policy; setup and report tools since).
 2. *You:* create the reviewer account (email and password, no 2FA) and populate its workspace: several monitors, one failing, an open incident, a status page.
-3. Run the six write tools against that workspace from a custom connector in Claude, and fix anything that fails.
+3. Run the write tools against that workspace from a custom connector in Claude, and fix anything that fails.
 4. *You:* add the registry TXT record on `upti.my`, then `mcp-publisher validate` and `mcp-publisher publish` (Official MCP Registry). Glama and PulseMCP pick it up from there.
 5. *You:* submit to the Claude Connectors Directory (steps above).
 6. *You:* submit to Smithery and cursor.directory.
-7. Re-render the launch video (`videos/06-mcp-server`, `node source/render.mjs video`, both formats): the rendered MP4s still say "12 tools"; the sources and `copy.md` say 14 since 2026-11-05.
+7. Re-render the launch video (`videos/06-mcp-server`, `node source/render.mjs video`, both formats): the rendered MP4s still say "12 tools"; there are 24 since 2026-11-05 (setup, alerts and reports).
 8. *You:* OpenAI: business verification, then the plugin ZIP with the domain token, test cases and the re-rendered video.
 9. Announce with `videos/06-mcp-server/copy.md` (LinkedIn, X, r/mcp, YouTube) and Discord #announcements.
 
