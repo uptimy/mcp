@@ -34,7 +34,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 >
 > Ask what's down right now, how a service's uptime and latency looked over any time range and in each region, or why an incident opened, and the assistant answers from your real checks, including the errors from failed checks. It also sees the third-party services you follow, such as GitHub, Cloudflare or Stripe, so it can tell your problem apart from a provider's. It can also run the incident with you: post timeline updates, move it to a new status up to Resolved, publish updates to your status pages, schedule a maintenance window, pause or resume a monitor, or run a check right away to confirm a fix.
 >
-> You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can see and disconnect at any time under Settings → AI assistants. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting anything public, and there are no tools that delete anything. Creating and editing monitors stays in the Uptimy app and CLI.
+> You sign in with your Uptimy account and pick the workspace the assistant may see. Each connection gets its own key, valid for 90 days, which you can see and disconnect at any time under Settings → AI assistants. It can also set monitoring up: scan your domain for what to watch, add monitors and cron job monitors, create status pages, and send alerts to Slack, Teams, email or a webhook. Tools that change things are marked as such, the server asks the assistant to confirm with you before posting or publishing anything public, and there are no tools that delete anything: editing and removing stay in the Uptimy app and CLI.
 
 **Starter prompts** (ChatGPT: up to 3, 128 characters each)
 1. Is anything down right now?
@@ -56,7 +56,7 @@ Where the Uptimy MCP server is listed, and everything needed to submit or update
 
 **Auth, for forms that ask:** OAuth 2.1 with dynamic client registration (RFC 7591) and PKCE S256. Protected resource metadata at `https://mcp.upti.my/.well-known/oauth-protected-resource/mcp`; authorization server `https://api.upti.my` (RFC 8414 metadata, RFC 9207 `iss`). Any HTTPS redirect URI can register, plus loopback `http://localhost:<port>` and `http://127.0.0.1:<port>`, so Claude, ChatGPT and Cursor callbacks need no allowlisting. The server also accepts an API key as a Bearer header.
 
-**Tools:** 14. Read: `get_status_overview`, `get_monitor`, `get_monitor_metrics`, `list_incidents`, `get_incident`, `get_dependencies`, `list_reports`, `get_uptime_report`. Write: `create_incident`, `post_incident_update`, `schedule_maintenance` (these three can publish to public status pages, so they're marked open-world), `set_monitor_paused` and `follow_dependency` (destructive, idempotent: they can turn monitoring or a follow off), `trigger_check`. Every tool has a title and explicit read-only, destructive and open-world hints; a test in `internal/server` keeps it that way.
+**Tools:** 22. Read: `get_status_overview`, `get_monitor`, `get_monitor_metrics`, `list_incidents`, `get_incident`, `get_dependencies`, `list_reports`, `get_uptime_report`, `list_alerts`, `suggest_monitors` (open-world: it scans the user's domain). Write: `create_incident`, `post_incident_update`, `schedule_maintenance`, `create_status_page`, `add_to_status_page` (these five can change what public status pages show, so they're marked open-world), `set_monitor_paused`, `set_alert_paused` and `follow_dependency` (destructive, idempotent: they can turn monitoring, alerting or a follow off), `trigger_check`, `add_monitors`, `add_cron_monitor` and `add_alert` (additive; the add tools skip or return what already exists). Every tool has a title and explicit read-only, destructive and open-world hints; a test in `internal/server` keeps it that way.
 
 ## Official MCP Registry
 
@@ -92,9 +92,9 @@ The portal's steps, in order (checked 2026-11-05):
 7. **Data handling:** the API is our own (first-party); no health data, no sponsored content.
    - *What data does the connector access?* Monitors and their configuration (request headers, bodies, scripts and fields holding credentials are removed by name before anything is returned), check results and errors, uptime and latency metrics, incidents and their timelines, status pages, maintenance windows.
    - *Where is it stored?* Nothing is stored by the connector; it's a stateless gateway to Uptimy's API. It logs which tool was called, by which key, when and from which IP. The OAuth sign-in creates an API key in the user's workspace.
-   - *What can it change?* Incidents and their updates, status page posts, maintenance windows, pausing monitors, following third-party services, running a check. Nothing can be deleted.
+   - *What can it change?* Incidents and their updates, status page posts, maintenance windows, pausing monitors and alerts, following third-party services, running a check, and adding monitors, cron job monitors, status pages and alerts. Nothing can be deleted or edited beyond that.
 8. **Test & launch:** the reviewer account's sign-in (email and password, no 2FA) and a populated workspace: several monitors, at least one failing, an open incident and a status page. Confirm every tool was run as a custom connector: the read tools were run from Claude Code on 2026-10-07; run the six write tools against the reviewer workspace before submitting.
-9. **Compliance:** seven acknowledgments (directory guidelines, first-party API usage, financial transactions, AI media generation, prompt injection, conversation data collection, public documentation). Uptimy meets each: it calls only its own API, moves no money, generates no media, its tool descriptions only describe the tools, and it reads nothing from the conversation beyond the tool arguments.
+9. **Compliance:** seven acknowledgments (directory guidelines, first-party API usage, financial transactions, AI media generation, prompt injection, conversation data collection, public documentation). Uptimy meets each: it calls only its own API, moves no money, generates no media, its tool descriptions only describe the tools, and it reads nothing from the conversation beyond the tool arguments. `suggest_monitors` probes the domain the user names (the same scan as the app's Setup), nothing else.
 
 After submitting, an automated scan lists it as a **Community** connector. Anthropic may escalate it to **Verified** review, where reviewers run each tool. Status and feedback are in the portal; escalations go to mcp-review@anthropic.com.
 
@@ -121,11 +121,11 @@ Upload a plugin ZIP at https://platform.openai.com/plugins. Requires individual 
 |---|---|---|
 | + | Is anything down right now? | Calls `get_status_overview`; names the failing monitor and since when. |
 | + | How has the failing API's latency looked over the last 24 hours, per region? | Calls `get_monitor_metrics`; reports uptime, average and p95 latency per region, and the recent failed checks with their errors. |
-| + | Show me the timeline of the open incident. | Calls `list_incidents` then `get_incident`; lists updates and status changes in order. |
+| + | Set up monitoring for example.com. | Calls `suggest_monitors`, shows what it found, and after the user picks, calls `add_monitors` with those. |
 | + | Post a public update on the open incident: "We've identified the cause and are deploying a fix." | Shows the text and confirms first, then calls `post_incident_update` with `public: true`. |
 | + | Schedule maintenance for the healthy monitor tomorrow from 22:00 to 23:00 UTC. | Calls `schedule_maintenance` with that monitor and window, after confirming. |
 | − | Delete the failing monitor. | No tool deletes anything; explains it can't, and points to the Uptimy app. |
-| − | Create a new monitor for https://example.com. | Explains creating monitors isn't available here; points to the app or uptimyctl. |
+| − | Change the failing monitor's URL to https://example.com/health. | No tool edits a monitor; explains it can't, and points to the Uptimy app or uptimyctl. |
 | − | What's the weather in Berlin? | Doesn't call any Uptimy tool. |
 
 ## Cursor
