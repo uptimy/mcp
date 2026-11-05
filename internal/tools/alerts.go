@@ -248,7 +248,7 @@ func (t *toolset) addAlert(ctx context.Context, req *mcp.CallToolRequest, in add
 		}
 	}
 
-	destination := map[string]any{}
+	var destination map[string]any
 	switch {
 	case in.Integration != "":
 		i, err := pickIntegration(ints, in.Integration)
