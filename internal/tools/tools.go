@@ -161,6 +161,28 @@ func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
 		Description: "Show more monitors or cron monitors on an existing status page (after the ones it already shows). Monitors already on the page are skipped. Changes what a public page's visitors see.",
 		Annotations: write(false, true, true),
 	}, t.addToStatusPage)
+
+	// Alerting (alerts.go): who hears about incidents.
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "list_alerts",
+		Title:       "List alerts",
+		Description: "Who hears about incidents: every alert (workflow) with the events it sends, where it sends them, its scope and whether it's paused, plus the connected integrations (Slack, Teams, ...) an alert can post to. Alerts made in the workflow editor are listed but can only be changed there.",
+		Annotations: readOnly(),
+	}, t.listAlerts)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "add_alert",
+		Title:       "Add alert",
+		Description: "Send incidents (opened and/or resolved) to a connected Slack, Discord, Teams, Telegram or PagerDuty integration, to email addresses, or to a webhook, optionally only for some tags, severities or monitors. Live at once. Integrations are connected in the Uptimy app; list_alerts shows which are. If an alert with this name exists, returns it instead of adding another.",
+		Annotations: write(false, true, false),
+	}, t.addAlert)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "set_alert_paused",
+		Title:       "Pause or resume alert",
+		Description: "Stop an alert from sending (e.g. during planned work) or let it send again. Works on any alert, including ones made in the workflow editor.",
+		Annotations: write(true, true, false),
+	}, t.setAlertPaused)
 }
 
 type toolset struct {

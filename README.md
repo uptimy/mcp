@@ -27,8 +27,11 @@ It is a stateless gateway with no database or secrets of its own. Each request c
 | `add_cron_monitor` | write | heartbeat monitors; returns an existing one with the same name |
 | `create_status_page` | write | api status page (private unless asked) + a "Services" group |
 | `add_to_status_page` | write | api status page groups: appends to the first group |
+| `list_alerts` | read | workflows workflows + integrations (no credentials), api tags, healthchecks and heartbeats for names |
+| `add_alert` | write | workflows template alert: an integration, emails or a webhook, scoped by tags, severities or monitors; returns an existing one with the same name |
+| `set_alert_paused` | write | workflows workflow enabled (any workflow, editor-made too) |
 
-There are no delete tools, and the setup tools only add things. Editing monitors, alerting and status page design stays in the app and the CLI; see CONFIGURE_WITH_AGENTS_PLAN.md at the uptimy root.
+There are no delete tools, and the setup tools only add things. Editing monitors, alerts made in the workflow editor and status page design stays in the app and the CLI; see CONFIGURE_WITH_AGENTS_PLAN.md at the uptimy root.
 
 ## Connecting
 
