@@ -2,6 +2,7 @@ package upstream
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +19,8 @@ func TestPlanErrorsReadAsPlanErrors(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "higher plan") {
 		t.Fatalf("got %v, want a plan error", err)
 	}
-	if e, ok := err.(*Error); !ok || e.Code != "FEATURE_NOT_AVAILABLE.400" {
+	var e *Error
+	if !errors.As(err, &e) || e.Code != "FEATURE_NOT_AVAILABLE.400" {
 		t.Fatalf("code kept: %#v", err)
 	}
 }

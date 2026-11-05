@@ -5,6 +5,10 @@
   "description": "Uptime monitoring from your assistant: see what's down, run incidents, set up monitors and reports.",
   "version": "1.0.0",
   "websiteUrl": "https://www.upti.my/docs/mcp",
+  "repository": {
+    "url": "https://github.com/uptimy/upti.my-mcp",
+    "source": "github"
+  },
   "icons": [
     {
       "src": "https://www.upti.my/brand/uptimy-app-icon.png",

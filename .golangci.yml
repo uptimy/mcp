@@ -1,0 +1,53 @@
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+    - usestdlibvars
+  settings:
+    errcheck:
+      exclude-functions:
+        - io.Copy # draining a response body before closing it
+        - (net/http.ResponseWriter).Write # the client has gone; nothing to do
+        - (*encoding/json.Encoder).Encode # likewise, when writing a response
+        - (*database/sql.Tx).Rollback # deferred; a no-op after Commit
+    staticcheck:
+      checks:
+        - all
+        - -ST1000 # package comments: covered by revive
+        - -ST1005 # error strings: ours are user-facing and start with "Uptimy"
+        - -ST1003 # naming: initialisms are handled by revive var-naming
+    gosec:
+      excludes:
+        - G104 # unhandled errors: errcheck covers these, with its own exclusions
+        - G115 # int conversions: sizes and timestamps here are bounded
+    revive:
+      rules:
+        - name: exported
+          arguments: [disableStutteringCheck]
+        - name: package-comments
+        - name: var-naming
+        - name: indent-error-flow
+        - name: error-strings
+          disabled: true # messages here are user-facing sentences ("Uptimy rejected ...")
+    misspell:
+      locale: US
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

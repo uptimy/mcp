@@ -238,7 +238,7 @@ type getReportOut struct {
 	Methodology     string                 `json:"methodology"`
 }
 
-// Rows the tool returns; the rest is summarised, the full report is in the app.
+// Rows the tool returns; the rest is summarized, the full report is in the app.
 const (
 	reportMonitorRows  = 15
 	reportIncidentRows = 5
