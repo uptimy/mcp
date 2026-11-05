@@ -125,6 +125,42 @@ func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
 		Description: "Schedule a maintenance window. Alerts and incidents for the listed monitors are suppressed while it is active. Pass statusPageUuids to announce it on status pages.",
 		Annotations: write(false, false, true),
 	}, t.scheduleMaintenance)
+
+	// Setting the workspace up (setup.go): these only add things.
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "suggest_monitors",
+		Title:       "Suggest monitors for a domain",
+		Description: "Scan a domain the way Uptimy's Setup does: its usual subdomains (www, api, app, ...) and their certificates. Returns what to monitor, which of it is already monitored, and how many more checks the plan allows. Adds nothing: show the list to the user, then call add_monitors with what they pick.",
+		Annotations: readOnlyOpenWorld(),
+	}, t.suggestMonitors)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "add_monitors",
+		Title:       "Add monitors",
+		Description: "Add website/API checks (http), certificate expiry (ssl), open ports (tcp), ping and DNS checks, up to 20 at a time. They check from every region the plan allows, every 60s by default (ssl hourly), and alert like the workspace's other monitors. A target already checked by a monitor of the same type is skipped and listed, so calling twice is safe.",
+		Annotations: write(false, true, false),
+	}, t.addMonitors)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "add_cron_monitor",
+		Title:       "Add cron job monitor",
+		Description: "Watch a scheduled job (cron, backup, queue worker) with a heartbeat: give how often it runs or its cron schedule. Returns the ping URL and the line to add to the job; a run that's late or doesn't ping alerts. If a cron monitor with this name exists, returns it instead of adding another.",
+		Annotations: write(false, true, false),
+	}, t.addCronMonitor)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "create_status_page",
+		Title:       "Create status page",
+		Description: "Create a status page showing these monitors and cron monitors. Private (workspace members only) unless public is true; publish only when the user asks.",
+		Annotations: write(false, false, true),
+	}, t.createStatusPage)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "add_to_status_page",
+		Title:       "Add to status page",
+		Description: "Show more monitors or cron monitors on an existing status page (after the ones it already shows). Monitors already on the page are skipped. Changes what a public page's visitors see.",
+		Annotations: write(false, true, true),
+	}, t.addToStatusPage)
 }
 
 type toolset struct {
@@ -137,6 +173,13 @@ type toolset struct {
 func readOnly() *mcp.ToolAnnotations {
 	f := false
 	return &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &f, OpenWorldHint: &f}
+}
+
+// readOnlyOpenWorld describes a tool that changes nothing in Uptimy but
+// reaches outside it (suggest_monitors probes the user's domain).
+func readOnlyOpenWorld() *mcp.ToolAnnotations {
+	f, t := false, true
+	return &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &f, OpenWorldHint: &t}
 }
 
 // write describes a tool that changes the workspace. publishes marks tools

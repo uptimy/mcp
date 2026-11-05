@@ -56,7 +56,7 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data, ok := map[string]string{
 		"GET /v1/api/api-key": `{"uuid":"k1","scope":"full","expiresAt":null,"workspace":{"id":1,"name":"Acme"}}`,
 		"GET /v1/api/healthchecks/": `{"results":[
-			{"uuid":"hc-ok","active":true,"intervalSeconds":60,"healthcheckTypeId":1,"applicationUuid":"app-ok","healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-ok","name":"Website","status":"Healthy"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}],"analyticsDailyRegionRollups":[{"huge":"payload"}]},
+			{"uuid":"hc-ok","active":true,"intervalSeconds":60,"healthcheckTypeId":1,"applicationUuid":"app-ok","config":{"uri":"https://acme.test"},"healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-ok","name":"Website","status":"Healthy"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}],"analyticsDailyRegionRollups":[{"huge":"payload"}]},
 			{"uuid":"hc-down","active":true,"intervalSeconds":30,"healthcheckTypeId":1,"applicationUuid":"app-down","healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-down","name":"Checkout API","status":"Down","lastStatusUpdate":"2026-10-06T10:00:00Z"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}]}]}`,
 		"GET /v1/api/healthchecks/hc-down": `{"uuid":"hc-down","active":true,"intervalSeconds":30,"timeoutSeconds":10,"healthcheckTypeId":1,"config":{"url":"https://acme.test/checkout","headers":{"Authorization":"Bearer secret"}},"application":{"uuid":"app-down","name":"Checkout API","status":"Down"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"},{"uuid":"s-sin","name":"Singapore"}],"tags":[{"id":7,"name":"prod"}]}`,
 		"GET /v1/api/healthchecks/hc-down/analytics/minute-region": `{"results":[
@@ -92,6 +92,26 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"GET /v1/api/source-follows/":           `{"results":[{"sourceWorkspaceId":369,"sourceUuid":"p-api"}]}`,
 		"PUT /v1/api/source-follows/":           `{"results":[]}`,
 		"DELETE /v1/api/source-follows/369":     `{}`,
+		// Setting up (setup.go)
+		"POST /v1/api/discovery/": `{"domain":"acme.test","quota":{"limit":10,"used":2,"remaining":8},"suggestions":[
+			{"host":"acme.test","url":"https://acme.test","kind":"http","meta":{"statusCode":200,"healthy":true}},
+			{"host":"api.acme.test","url":"https://api.acme.test","kind":"http","meta":{"statusCode":404,"healthy":false}},
+			{"host":"acme.test","url":"https://acme.test","kind":"ssl","meta":{"certExpiresAt":"2027-01-01T00:00:00Z"}}]}`,
+		"GET /v1/api/quota":       `{"healthcheckFrequency":30,"healthcheckLimit":10}`,
+		"GET /v1/api/schedulers/": `{"results":[{"uuid":"s-fra","name":"Frankfurt","premium":false},{"uuid":"s-sin","name":"Singapore","premium":false}]}`,
+		"POST /v1/api/tags/":      `{"id":7,"name":"prod"}`,
+		"POST /v1/api/healthchecks/bulk": `{"results":[
+			{"uuid":"app-new1","name":"api.acme.test","healthcheck":{"uuid":"hc-new1","intervalSeconds":60}},
+			{"uuid":"app-new2","name":"acme.test SSL","healthcheck":{"uuid":"hc-new2","intervalSeconds":3600}}]}`,
+		"PUT /v1/api/applications/app-new1/healthchecks/tags/": `{}`,
+		"PUT /v1/api/applications/app-new2/healthchecks/tags/": `{}`,
+		"POST /v1/api/heartbeat-monitors/":                     `{"uuid":"hb-new","name":"Queue worker","intervalSeconds":300,"credential":{"publicId":"pubnew"}}`,
+		"POST /v1/api/status-pages/":                           `{"uuid":"sp-new","name":"Acme Public","slug":"acme-public","public":false}`,
+		"POST /v1/api/status-pages/sp-new/groups/":             `{}`,
+		"GET /v1/api/status-pages/sp-1":                        `{"uuid":"sp-1","name":"Acme Status","slug":"acme","public":true}`,
+		"GET /v1/api/status-pages/sp-1/groups/": `{"results":[{"uuid":"g-1","label":"Services","hidden":false,"order":0,"entries":[
+			{"uuid":"e-1","kind":"service","applicationUuid":"app-ok","heartbeatMonitorUuid":null,"order":0,"showDailies":true,"isVisible":true,"customLabel":"Website"}]}]}`,
+		"PUT /v1/api/status-pages/sp-1/groups/g-1": `{}`,
 	}[r.Method+" "+r.URL.Path]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -237,12 +257,14 @@ func TestListsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 14 {
-		t.Errorf("got %d tools, want 14", len(res.Tools))
+	if len(res.Tools) != 19 {
+		t.Errorf("got %d tools, want 19", len(res.Tools))
 	}
 	// Directory reviews (Claude, ChatGPT) require a title and explicit
-	// read-only, destructive and open-world hints on every tool.
-	publishes := map[string]bool{"create_incident": true, "post_incident_update": true, "schedule_maintenance": true}
+	// read-only, destructive and open-world hints on every tool. Open-world:
+	// it can change what public status pages show, or it reaches the internet.
+	publishes := map[string]bool{"create_incident": true, "post_incident_update": true, "schedule_maintenance": true,
+		"create_status_page": true, "add_to_status_page": true, "suggest_monitors": true}
 	for _, tool := range res.Tools {
 		a := tool.Annotations
 		if tool.Title == "" || a == nil || a.DestructiveHint == nil || a.OpenWorldHint == nil {
@@ -250,7 +272,7 @@ func TestListsTools(t *testing.T) {
 			continue
 		}
 		if *a.OpenWorldHint != publishes[tool.Name] {
-			t.Errorf("%s: openWorldHint = %v, want %v (posts to public status pages)", tool.Name, *a.OpenWorldHint, publishes[tool.Name])
+			t.Errorf("%s: openWorldHint = %v, want %v", tool.Name, *a.OpenWorldHint, publishes[tool.Name])
 		}
 		if a.ReadOnlyHint && *a.DestructiveHint {
 			t.Errorf("%s: read-only tools can't be destructive", tool.Name)

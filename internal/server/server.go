@@ -22,7 +22,8 @@ import (
 
 const instructions = `Uptimy monitors websites, APIs and cron jobs from several regions and runs incidents and status pages.
 Start with get_status_overview: it lists every monitor, heartbeat, open incident and status page with the UUIDs the other tools take.
-Write tools change production state (public status pages, alerting); confirm with the user before posting public updates or pausing monitors.`
+To set monitoring up: suggest_monitors for the user's domain, then add_monitors with what they pick; add_cron_monitor for scheduled jobs; create_status_page to show them.
+Write tools change production state (public status pages, alerting); confirm with the user before posting public updates, publishing a status page or pausing monitors.`
 
 // Config is what the server needs beyond its upstream client.
 type Config struct {
