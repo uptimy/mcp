@@ -112,6 +112,16 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"GET /v1/api/status-pages/sp-1/groups/": `{"results":[{"uuid":"g-1","label":"Services","hidden":false,"order":0,"entries":[
 			{"uuid":"e-1","kind":"service","applicationUuid":"app-ok","heartbeatMonitorUuid":null,"order":0,"showDailies":true,"isVisible":true,"customLabel":"Website"}]}]}`,
 		"PUT /v1/api/status-pages/sp-1/groups/g-1": `{}`,
+		// Alerting (alerts.go)
+		"GET /v1/api/integrations/": `{"results":[{"uuid":"int-slack","provider":"slack","name":"Acme","config":{"channelName":"ops"}},{"uuid":"int-gh","provider":"github","name":"acme/app","config":{}}]}`,
+		"GET /v1/api/tags/":         `{"results":[{"id":7,"name":"prod"},{"id":8,"name":"staging"}]}`,
+		"GET /v1/api/workflows/": `{"results":[
+			{"uuid":"wf-default","name":"Default email alerts","enabled":true,"triggerTypes":["incident.created"],"destinations":[{"type":"email"}],"alert":null},
+			{"uuid":"wf-ops","name":"Prod to #ops","enabled":false,"triggerTypes":["incident.created","incident.resolved"],"destinations":[{"type":"slack","integrationUuid":"int-slack"}],
+			 "alert":{"destination":{"type":"integration","integrationUuid":"int-slack","provider":"slack"},"events":["opened","resolved"],"tagIds":[7],"severities":[],"sourceUuids":["app-down"]}}]}`,
+		"POST /v1/api/alerts/": `{"uuid":"wf-new","name":"Critical to #ops","enabled":true,"triggerTypes":["incident.created","incident.resolved"],"destinations":[{"type":"slack","integrationUuid":"int-slack"}],
+			"alert":{"destination":{"type":"integration","integrationUuid":"int-slack","provider":"slack"},"tagIds":[7],"severities":["critical"],"sourceUuids":["app-down"]}}`,
+		"PATCH /v1/api/workflows/wf-ops": `{"uuid":"wf-ops","name":"Prod to #ops","enabled":true}`,
 	}[r.Method+" "+r.URL.Path]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -257,8 +267,8 @@ func TestListsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 19 {
-		t.Errorf("got %d tools, want 19", len(res.Tools))
+	if len(res.Tools) != 22 {
+		t.Errorf("got %d tools, want 22", len(res.Tools))
 	}
 	// Directory reviews (Claude, ChatGPT) require a title and explicit
 	// read-only, destructive and open-world hints on every tool. Open-world:
