@@ -1,96 +1,125 @@
-# upti.my-mcp 
+<p align="center">
+  <a href="https://www.upti.my/?utm_source=github&utm_medium=readme&utm_campaign=mcp">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.upti.my/brand/uptimy-logo-white.svg">
+      <img src="https://www.upti.my/brand/uptimy-logo.svg" alt="Uptimy" height="48">
+    </picture>
+  </a>
+</p>
 
-Uptimy's remote MCP server, at `https://mcp.upti.my/mcp`. It lets AI assistants check what is down, read uptime and latency and uptime reports against SLA targets, run incidents and schedule maintenance.
+<h3 align="center">Uptimy MCP server</h3>
 
-It is a stateless gateway with no database or secrets of its own. Each request carries the caller's own `upt_` API key, which is forwarded to the same `/v1/api/*` routes [uptimyctl](../uptimyctl) uses. Incidents and maintenances go to workflows, heartbeats to the heartbeat service, uptime reports to the reports service (`REPORTS_URL`), and everything else to api. Responses are trimmed before they reach the model; for example, the raw healthcheck list carries every monitor's daily rollups.
+<p align="center">
+  Your uptime monitoring, in your AI assistant.<br>
+  Ask what's down, run incidents and status page updates, and set up monitors, alerts and reports from Claude, ChatGPT or Cursor.
+</p>
 
-## Tools
+<p align="center">
+  <a href="https://github.com/uptimy/upti.my-mcp/actions/workflows/ci.yml"><img src="https://github.com/uptimy/upti.my-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/uptimy/upti.my-mcp" alt="License"></a>
+</p>
 
-| Tool | Kind | Backed by |
-|---|---|---|
-| `get_status_overview` | read | api healthchecks + status pages, heartbeat monitors, workflows open incidents |
-| `get_monitor` | read | api healthcheck, falling back to heartbeat monitor |
-| `get_monitor_metrics` | read | api analytics rollups (minute/hour/day by range) + last hour of executions |
-| `list_incidents` | read | workflows incidents |
-| `get_incident` | read | workflows incident with timeline |
-| `get_dependencies` | read | api public services catalog + workflows source follows |
-| `list_reports` | read | reports definitions |
-| `get_uptime_report` | read | reports range / month / quarter / weekly / live report, trimmed to the summary, monitors worst first, longest incidents, maintenance |
-| `create_incident` | write | workflows incidents |
-| `post_incident_update` | write | workflows incident updates, status change, status pages to show it on |
-| `set_monitor_paused` | write | api healthcheck / heartbeat monitor update |
-| `trigger_check` | write | api healthcheck trigger |
-| `schedule_maintenance` | write | workflows maintenances |
-| `follow_dependency` | write | workflows source follows |
-| `suggest_monitors` | read (reaches the internet) | api discovery: the scan Setup runs, without a new workspace |
-| `add_monitors` | write | api tags + bulk healthchecks, with Setup's defaults (every allowed region, 60s / ssl 1h, raised to the plan floor); skips targets already checked |
-| `add_cron_monitor` | write | heartbeat monitors; returns an existing one with the same name |
-| `create_status_page` | write | api status page (private unless asked) + a "Services" group |
-| `add_to_status_page` | write | api status page groups: appends to the first group |
-| `list_alerts` | read | workflows workflows + integrations (no credentials), api tags, healthchecks and heartbeats for names |
-| `add_alert` | write | workflows template alert: an integration, emails or a webhook, scoped by tags, severities or monitors; returns an existing one with the same name |
-| `set_alert_paused` | write | workflows workflow enabled (any workflow, editor-made too) |
-| `add_report` | write | reports definition: every monitor, chosen ones or tags, SLA target, email schedule and recipients, brand name and color; returns an existing one with the same name (needs advancedReports) |
-| `update_report` | write | reports definition, merged with what's given (the default report too; without advancedReports it stays weekly) |
+<p align="center">
+  <a href="#connect">Connect</a> ·
+  <a href="#tools">Tools</a> ·
+  <a href="https://www.upti.my/docs/mcp">Docs</a>
+</p>
 
-There are no delete tools, and the setup tools only add things. Editing monitors, alerts made in the workflow editor and status page design stays in the app and the CLI; see CONFIGURE_WITH_AGENTS_PLAN.md at the uptimy root.
+---
 
-## Connecting
+[Uptimy](https://www.upti.my) monitors websites, APIs and cron jobs from several regions, opens incidents when something fails, and runs status pages and uptime reports. This is its remote MCP server, hosted at `https://mcp.upti.my/mcp`. Connect it and ask:
 
-Every request carries a full-scope `upt_` API key; Uptimy Agent keys are refused. You can get one through OAuth or paste one yourself. To paste one, create it in the app (Settings → API Keys) or with `uptimyctl auth login`.
+- *Is anything down right now?*
+- *Set up monitoring for my domain and alert #ops in Slack when something goes down.*
+- *Post an update on the open incident: the fix is deployed and we're monitoring.*
+- *How has my API's latency looked this week, per region?*
+- *Did we meet our SLA last month? Add a monthly report for Acme's monitors and email it to their CTO.*
 
-**Claude.ai, ChatGPT and other clients with OAuth:** add a custom connector
-with the URL `https://mcp.upti.my/mcp`. The client discovers sign-in on its own:
-the server's 401 points to `/.well-known/oauth-protected-resource/mcp`, which
-names `https://api.upti.my` as the authorization server. You approve on
-app.upti.my and pick a workspace. The client then receives a 90-day `upt_` key
-named "<client> (MCP)" with `source` "mcp", marked "AI assistant" under
-Settings → API Keys; revoking it disconnects the client. The whole flow is diagrammed in section 14 of
-ARCHITECTURE.md.
+The assistant answers from your real checks, including the errors from failed ones. It also sees the third-party services you follow (GitHub, Cloudflare, Stripe, ...), so it can tell your problem apart from a provider's.
 
-**Claude Code** with a pasted key:
+## Connect
+
+You need an [Uptimy account](https://app.upti.my); the free plan works. You sign in with it when you connect, so there's no key to copy.
+
+**Claude:** open **Customize → Connectors**, choose **+ Add → Add custom connector** and enter `https://mcp.upti.my/mcp`.
+
+**ChatGPT:** add a custom connector in ChatGPT's connector settings with the same URL.
+
+**Claude Code:**
 
 ```bash
-claude mcp add --transport http uptimy https://mcp.upti.my/mcp \
-  --header "Authorization: Bearer upt_..."
+claude mcp add --transport http uptimy https://mcp.upti.my/mcp
 ```
 
-Leave out `--header` to sign in with OAuth instead.
+Then run `/mcp`, pick **uptimy** and choose **Authenticate**.
 
-**Cursor** (`~/.cursor/mcp.json`) and other clients that take a URL and headers:
+**Cursor** (`~/.cursor/mcp.json`) and other clients that take a URL:
 
 ```json
 {
   "mcpServers": {
     "uptimy": {
-      "url": "https://mcp.upti.my/mcp",
-      "headers": { "Authorization": "Bearer upt_..." }
+      "url": "https://mcp.upti.my/mcp"
     }
   }
 }
 ```
 
-## Development
+When you sign in, you pick the workspace the assistant may see. Each connection gets its own API key, valid for 90 days and marked **AI assistant** under **Settings → API Keys**, where you can revoke it at any time. For clients without sign-in support, create a key there and send it as a header: `"headers": { "Authorization": "Bearer upt_..." }`.
 
-```bash
-make test   # end-to-end tests: MCP client -> server -> fake upstream
-make build
-make run    # listens on :8080, talks to production by default
-```
+## Tools
 
-| Env var | Default |
+24 tools: 10 that read and 14 that change something.
+
+| Read | |
 |---|---|
-| `HTTP_PORT` | `8080` |
-| `API_BASE_URL` | `https://api.upti.my` |
-| `WORKFLOWS_URL` | `https://workflows.upti.my` |
-| `HEARTBEATS_URL` | `https://heartbeats.upti.my` |
-| `PING_BASE_URL` | `https://ping.upti.my` (used in ping URLs) |
-| `PUBLIC_URL` | `https://mcp.upti.my` (OAuth resource URL) |
-| `AUTHORIZATION_SERVER` | `https://api.upti.my` |
-| `OPENAI_APPS_CHALLENGE` | unset; ChatGPT's domain-verification token, served at `/.well-known/openai-apps-challenge` when set |
+| `get_status_overview` | Every monitor, cron job monitor, open incident, status page and followed third-party service, problems first |
+| `get_monitor` | One monitor's target, schedule, regions and current status |
+| `get_monitor_metrics` | Uptime and latency over a time range, per region, with the latest failed checks and their errors |
+| `list_incidents`, `get_incident` | Recent incidents, and one incident with its timeline |
+| `get_dependencies` | The third-party services Uptimy measures, their status, and which ones you follow |
+| `list_reports`, `get_uptime_report` | Your uptime reports, and availability against the SLA target for any period |
+| `list_alerts` | Who hears about incidents: every alert, where it sends and whether it's paused |
+| `suggest_monitors` | Scans a domain you name for what's worth monitoring (the scan the app's Setup runs); adds nothing |
 
-## Deployment
+| Change | |
+|---|---|
+| `create_incident`, `post_incident_update` | Open an incident; post timeline updates, change its status and publish it to status pages |
+| `schedule_maintenance` | Schedule a maintenance window, optionally announced on status pages |
+| `set_monitor_paused`, `trigger_check` | Pause or resume a monitor; run a check right away to confirm a fix |
+| `follow_dependency` | Follow or unfollow a third-party service, so its outages open incidents in your workspace |
+| `add_monitors`, `add_cron_monitor` | Add website, API, certificate, port, ping and DNS checks; watch a cron job with a heartbeat |
+| `create_status_page`, `add_to_status_page` | Create a status page (private unless you ask); show more monitors on one |
+| `add_alert`, `set_alert_paused` | Send incidents to Slack, Discord, Teams, Telegram, PagerDuty, email or a webhook; pause or resume an alert |
+| `add_report`, `update_report` | Add an uptime report, for example one per client emailed every month; change one |
 
-The service runs on the homelab cluster in `uptimy-production`, from `~/homelab/apps/uptimy/mcp/base`. Upstream calls use the in-cluster service addresses. It runs 2 replicas in MCP's stateless Streamable HTTP mode, so it needs no sticky sessions.
+What each tool can do depends on your plan, as in the app: reports other than the weekly default, for example, need Growth and above.
 
-A push to `master` builds `ghcr.io/uptimy/upti.my-mcp:<sha>` and commits `deploy(mcp): <sha>` to homelab. Argo CD then syncs it.
+### What it won't do
+
+- **Nothing deletes.** Removing monitors, alerts, status pages or reports stays in the [Uptimy app](https://app.upti.my) and [uptimyctl](https://github.com/uptimy/uptimyctl), and so does editing a monitor's settings or a status page's design.
+- **Adding twice is safe.** The setup tools skip what's already monitored and return what already exists under the same name.
+- **It asks first.** Every tool is marked as read-only or not and destructive or not, so your client can ask before running it. The server also tells the assistant to confirm with you before posting public updates, publishing a status page or pausing monitors.
+
+## How it works
+
+The server is a stateless gateway with no database and no credentials of its own. Every request carries the caller's API key. The server checks the key with the Uptimy API and forwards the request to the same API [uptimyctl](https://github.com/uptimy/uptimyctl) uses. Successful checks are cached for 3 minutes, so a revoked key stops working within a few minutes. Responses are trimmed before they reach the model. Monitor settings that can hold secrets (headers, bodies, tokens, passwords, scripts, ...) come back as `[redacted]`.
+
+It logs one line per request and one per tool call: the tool, the key's ID, how long it took and any error. It never logs arguments or results.
+
+Sign-in is OAuth 2.1 with PKCE and dynamic client registration. `https://api.upti.my` is the authorization server, found through `https://mcp.upti.my/.well-known/oauth-protected-resource/mcp`.
+
+## Help & support
+
+- **Questions and setup help:** ask in [Discord](https://www.upti.my/discord), in the **#help** forum. Say which assistant you connected (Claude, ChatGPT, Cursor, ...).
+- **Bugs and feature requests:** [open an issue](https://github.com/uptimy/upti.my-mcp/issues/new/choose).
+- **Security issues:** report them privately, see [SECURITY.md](SECURITY.md).
+- **Uptimy account or billing:** [support@upti.my](mailto:support@upti.my).
+
+## Contributing
+
+Bug reports, fixes and new tools are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, how the code is laid out and how to add a tool. Report security issues privately ([SECURITY.md](SECURITY.md)).
+
+## License
+
+[Apache-2.0](LICENSE)

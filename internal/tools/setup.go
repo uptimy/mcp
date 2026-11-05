@@ -17,7 +17,7 @@ import (
 
 // Setting a workspace up from a chat: find what to monitor, add it, add cron
 // jobs, show them on a status page. These tools only add things, with the
-// same defaults as the app's Setup (CONFIGURE_WITH_AGENTS_PLAN.md).
+// same defaults as the app's Setup.
 
 // Healthcheck type ids (upti.my-api healthcheck_type).
 const (

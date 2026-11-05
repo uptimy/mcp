@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest a new tool or an improvement to one
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: What you'd like to ask your assistant, rather than the tool you'd add.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you imagine it working. For a new tool, see "Adding a tool" in CONTRIBUTING.md; it may be a small PR.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on this

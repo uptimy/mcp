@@ -1,0 +1,41 @@
+name: Bug report
+description: A tool fails, returns something wrong, or a client can't connect
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Found a security issue? Please report it privately instead: see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you asked the assistant, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      description: The tool that misbehaved, if you know it (assistants usually show the tool calls).
+      placeholder: get_uptime_report
+  - type: dropdown
+    id: client
+    attributes:
+      label: Which client?
+      options: [Claude (web or desktop), Claude Code, ChatGPT, Cursor, VS Code, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: auth
+    attributes:
+      label: How did you connect?
+      options: [Signed in (OAuth), API key in a header]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Tool call and result
+      description: The tool's arguments and what it returned or the error. Please remove any API keys (upt_...) first.
+      render: text

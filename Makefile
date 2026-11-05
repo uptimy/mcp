@@ -6,8 +6,10 @@ build:
 test:
 	go test -race ./...
 
+## lint: go vet and golangci-lint (https://golangci-lint.run), as in CI
 lint:
 	go vet ./...
+	golangci-lint run ./...
 
 fmt:
 	gofmt -w .
