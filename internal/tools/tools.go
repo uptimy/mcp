@@ -183,6 +183,21 @@ func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
 		Description: "Stop an alert from sending (e.g. during planned work) or let it send again. Works on any alert, including ones made in the workflow editor.",
 		Annotations: write(true, true, false),
 	}, t.setAlertPaused)
+
+	// Reports (report_setup.go): what each report covers and who gets it.
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "add_report",
+		Title:       "Add report",
+		Description: "Add an uptime report, e.g. one per client: availability against an SLA target for every monitor, chosen monitors or tagged ones, optionally branded with a company name and color. Given emails, it's emailed monthly (or weekly or quarterly); without, it's read on demand with get_uptime_report. Needs Growth and above. If a report with this name exists, returns it instead of adding another.",
+		Annotations: write(false, true, false),
+	}, t.addReport)
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "update_report",
+		Title:       "Change report",
+		Description: "Change a report's monitors, SLA target, email schedule, recipients or branding; what isn't given stays as it is. Works on the default report too, which always covers every monitor. Below Growth only the default report changes, and it stays weekly.",
+		Annotations: write(true, true, false),
+	}, t.updateReport)
 }
 
 type toolset struct {

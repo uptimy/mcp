@@ -26,6 +26,7 @@ type reportDefinition struct {
 	IsDefault    bool     `json:"isDefault"`
 	ScopeType    string   `json:"scopeType"`
 	MonitorUUIDs []string `json:"monitorUuids"`
+	TagIDs       []int    `json:"tagIds"`
 	SLATarget    float64  `json:"slaTarget"`
 	Cadence      string   `json:"cadence"`
 	SendDay      int      `json:"sendDay"`
@@ -48,10 +49,20 @@ type reportRow struct {
 
 var weekdays = []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 
-func (d reportDefinition) row() reportRow {
+// row describes a definition; tags names the workspace's tags by id.
+func (d reportDefinition) row(tags map[int]string) reportRow {
 	covers := "every monitor"
-	if d.ScopeType == "monitors" {
+	switch d.ScopeType {
+	case "monitors":
 		covers = fmt.Sprintf("%d chosen monitors", len(d.MonitorUUIDs))
+	case "tags":
+		names := make([]string, 0, len(d.TagIDs))
+		for _, id := range d.TagIDs {
+			if n, ok := tags[id]; ok {
+				names = append(names, n)
+			}
+		}
+		covers = "monitors tagged " + strings.Join(names, " or ")
 	}
 	schedule := "not scheduled (read on demand)"
 	if d.Cadence != "none" {
@@ -78,11 +89,30 @@ func (t *toolset) listReports(ctx context.Context, req *mcp.CallToolRequest, _ l
 	if err != nil {
 		return nil, listReportsOut{}, err
 	}
+	tags, err := t.reportTags(ctx, req, defs...)
+	if err != nil {
+		return nil, listReportsOut{}, err
+	}
 	out := listReportsOut{Reports: make([]reportRow, 0, len(defs))}
 	for _, d := range defs {
-		out.Reports = append(out.Reports, d.row())
+		out.Reports = append(out.Reports, d.row(tags))
 	}
 	return nil, out, nil
+}
+
+// reportTags names the workspace's tags, loaded only when a report is scoped by them.
+func (t *toolset) reportTags(ctx context.Context, req *mcp.CallToolRequest, defs ...reportDefinition) (map[int]string, error) {
+	names := map[int]string{}
+	for _, d := range defs {
+		if d.ScopeType == "tags" {
+			tags, err := t.listTags(ctx, req)
+			for _, tag := range tags {
+				names[tag.ID] = tag.Name
+			}
+			return names, err
+		}
+	}
+	return names, nil
 }
 
 func (t *toolset) reportDefinitions(ctx context.Context, req *mcp.CallToolRequest) ([]reportDefinition, error) {
