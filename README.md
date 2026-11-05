@@ -41,9 +41,10 @@ Every request carries a full-scope `upt_` API key; Uptimy Agent keys are refused
 with the URL `https://mcp.upti.my/mcp`. The client discovers sign-in on its own:
 the server's 401 points to `/.well-known/oauth-protected-resource/mcp`, which
 names `https://api.upti.my` as the authorization server. You approve on
-app.upti.my and pick a workspace. The client then receives a 90-day `upt_` key,
-listed under Settings → API Keys as "<client> (MCP)". The whole flow is
-diagrammed in section 14 of ARCHITECTURE.md.
+app.upti.my and pick a workspace. The client then receives a 90-day `upt_` key
+named "<client> (MCP)" with `source` "mcp"; Settings → AI assistants lists these
+keys and disconnects them. The whole flow is diagrammed in section 14 of
+ARCHITECTURE.md.
 
 **Claude Code** with a pasted key:
 
