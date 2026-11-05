@@ -30,6 +30,8 @@ It is a stateless gateway with no database or secrets of its own. Each request c
 | `list_alerts` | read | workflows workflows + integrations (no credentials), api tags, healthchecks and heartbeats for names |
 | `add_alert` | write | workflows template alert: an integration, emails or a webhook, scoped by tags, severities or monitors; returns an existing one with the same name |
 | `set_alert_paused` | write | workflows workflow enabled (any workflow, editor-made too) |
+| `add_report` | write | reports definition: every monitor, chosen ones or tags, SLA target, email schedule and recipients, brand name and color; returns an existing one with the same name (needs advancedReports) |
+| `update_report` | write | reports definition, merged with what's given (the default report too; without advancedReports it stays weekly) |
 
 There are no delete tools, and the setup tools only add things. Editing monitors, alerts made in the workflow editor and status page design stays in the app and the CLI; see CONFIGURE_WITH_AGENTS_PLAN.md at the uptimy root.
 

@@ -86,6 +86,9 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"GET /v1/api/reports/definitions": `{"results":[
 			{"uuid":"def-all","name":"All monitors","isDefault":true,"scopeType":"workspace","monitorUuids":null,"slaTarget":99.9,"cadence":"weekly","sendDay":1,"sendHour":9,"sendMinute":0,"sendTimezone":"UTC","emailEnabled":true,"recipients":["ops@acme.test"]},
 			{"uuid":"00000000-0000-0000-0000-00000000acme","name":"Acme","isDefault":false,"scopeType":"monitors","monitorUuids":["app-down"],"slaTarget":99.5,"cadence":"monthly","sendDay":1,"sendHour":9,"sendMinute":0,"sendTimezone":"Europe/Sarajevo","emailEnabled":true,"recipients":["cto@acme.test","me@agency.test"]}]}`,
+		"GET /v1/api/reports/definitions/def-all": `{"uuid":"def-all","name":"All monitors","isDefault":true,"scopeType":"workspace","monitorUuids":null,"tagIds":null,"slaTarget":99.9,"latencyThresholdMs":null,"cadence":"weekly","sendDay":1,"sendHour":9,"sendMinute":0,"sendTimezone":"Europe/Sarajevo","emailEnabled":true,"brandName":null,"brandLogoUrl":"https://cdn.acme.test/logo.png","brandColor":null,"recipients":["ops@acme.test"],"lastSentPeriodStart":"2026-10-26","createdAt":"2026-01-01T00:00:00Z"}`,
+		"PUT /v1/api/reports/definitions/def-all": `{"uuid":"def-all","name":"All monitors","isDefault":true,"scopeType":"workspace","slaTarget":99.9,"cadence":"weekly","sendDay":5,"sendHour":17,"sendMinute":0,"sendTimezone":"Europe/Sarajevo","emailEnabled":true,"recipients":["ops@acme.test","cto@acme.test"]}`,
+		"POST /v1/api/reports/definitions":        `{"uuid":"def-new","name":"Globex","isDefault":false,"scopeType":"tags","tagIds":[7],"slaTarget":99.5,"cadence":"monthly","sendDay":1,"sendHour":8,"sendMinute":30,"sendTimezone":"UTC","emailEnabled":true,"recipients":["cto@globex.test"]}`,
 		"GET /v1/api/reports/periods":           `{"timezone":"UTC","weeks":[{"periodStart":"2026-10-05"}]}`,
 		"GET /v1/api/reports/range":             reportJSON,
 		"GET /v1/api/reports/weekly/2026-10-05": reportJSON,
@@ -267,8 +270,8 @@ func TestListsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 22 {
-		t.Errorf("got %d tools, want 22", len(res.Tools))
+	if len(res.Tools) != 24 {
+		t.Errorf("got %d tools, want 24", len(res.Tools))
 	}
 	// Directory reviews (Claude, ChatGPT) require a title and explicit
 	// read-only, destructive and open-world hints on every tool. Open-world:
