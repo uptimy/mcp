@@ -183,6 +183,7 @@ type statusPage struct {
 	UUID         string  `json:"uuid"`
 	Name         string  `json:"name"`
 	Slug         string  `json:"slug"`
+	Public       bool    `json:"public"`
 	CustomDomain *string `json:"customDomain"`
 }
 

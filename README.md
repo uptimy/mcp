@@ -22,8 +22,13 @@ It is a stateless gateway with no database or secrets of its own. Each request c
 | `trigger_check` | write | api healthcheck trigger |
 | `schedule_maintenance` | write | workflows maintenances |
 | `follow_dependency` | write | workflows source follows |
+| `suggest_monitors` | read (reaches the internet) | api discovery: the scan Setup runs, without a new workspace |
+| `add_monitors` | write | api tags + bulk healthchecks, with Setup's defaults (every allowed region, 60s / ssl 1h, raised to the plan floor); skips targets already checked |
+| `add_cron_monitor` | write | heartbeat monitors; returns an existing one with the same name |
+| `create_status_page` | write | api status page (private unless asked) + a "Services" group |
+| `add_to_status_page` | write | api status page groups: appends to the first group |
 
-There are no delete tools. Creating and editing monitors, alert rules and status pages stays in the CLI.
+There are no delete tools, and the setup tools only add things. Editing monitors, alerting and status page design stays in the app and the CLI; see CONFIGURE_WITH_AGENTS_PLAN.md at the uptimy root.
 
 ## Connecting
 
