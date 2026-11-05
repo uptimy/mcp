@@ -71,7 +71,7 @@ When you sign in, you pick the workspace the assistant may see. Each connection 
 
 24 tools: 10 that read and 14 that change something.
 
-| Read | |
+| Read | What it does |
 |---|---|
 | `get_status_overview` | Every monitor, cron job monitor, open incident, status page and followed third-party service, problems first |
 | `get_monitor` | One monitor's target, schedule, regions and current status |
@@ -82,7 +82,7 @@ When you sign in, you pick the workspace the assistant may see. Each connection 
 | `list_alerts` | Who hears about incidents: every alert, where it sends and whether it's paused |
 | `suggest_monitors` | Scans a domain you name for what's worth monitoring (the scan the app's Setup runs); adds nothing |
 
-| Change | |
+| Change | What it does |
 |---|---|
 | `create_incident`, `post_incident_update` | Open an incident; post timeline updates, change its status and publish it to status pages |
 | `schedule_maintenance` | Schedule a maintenance window, optionally announced on status pages |
