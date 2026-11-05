@@ -9,7 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/uptimy/upti.my-mcp/internal/upstream"
+	"github.com/uptimy/mcp/internal/upstream"
 )
 
 type overviewIn struct{}

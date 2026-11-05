@@ -4,7 +4,7 @@ The Uptimy MCP server handles every connected assistant's API key and can change
 
 ## Reporting a vulnerability
 
-Please **don't open a public issue**. Report it privately through GitHub: on the [Security tab](https://github.com/uptimy/upti.my-mcp/security), choose **Report a vulnerability**. Include what you found and how to reproduce it: the client you connected with and the tool calls, with any keys removed.
+Please **don't open a public issue**. Report it privately through GitHub: on the [Security tab](https://github.com/uptimy/mcp/security), choose **Report a vulnerability**. Include what you found and how to reproduce it: the client you connected with and the tool calls, with any keys removed.
 
 You'll hear back within 3 working days. We'll keep you updated while we fix it, credit you if you'd like, and ask you to hold off on public disclosure until the fix is deployed.
 
