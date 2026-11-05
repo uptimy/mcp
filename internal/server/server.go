@@ -16,8 +16,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
-	"github.com/uptimy/upti.my-mcp/internal/tools"
-	"github.com/uptimy/upti.my-mcp/internal/upstream"
+	"github.com/uptimy/mcp/internal/tools"
+	"github.com/uptimy/mcp/internal/upstream"
 )
 
 const instructions = `Uptimy monitors websites, APIs and cron jobs from several regions and runs incidents and status pages.

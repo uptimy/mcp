@@ -12,7 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/uptimy/upti.my-mcp/internal/upstream"
+	"github.com/uptimy/mcp/internal/upstream"
 )
 
 // Setting a workspace up from a chat: find what to monitor, add it, add cron

@@ -2,14 +2,14 @@
 
 Thanks for helping. Bug reports, fixes and new tools are all welcome. This page covers how to get set up, how the code is laid out, and how to add a tool.
 
-For anything bigger than a fix (a new tool, a change in what a tool does), please [open an issue](https://github.com/uptimy/upti.my-mcp/issues/new/choose) first so we can agree on the approach before you spend time on it.
+For anything bigger than a fix (a new tool, a change in what a tool does), please [open an issue](https://github.com/uptimy/mcp/issues/new/choose) first so we can agree on the approach before you spend time on it.
 
 ## Setting up
 
 You need Go 1.25+.
 
 ```bash
-git clone https://github.com/uptimy/upti.my-mcp && cd upti.my-mcp
+git clone https://github.com/uptimy/mcp && cd mcp
 make test
 ```
 

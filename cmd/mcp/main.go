@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/uptimy/upti.my-mcp/internal/server"
-	"github.com/uptimy/upti.my-mcp/internal/upstream"
+	"github.com/uptimy/mcp/internal/server"
+	"github.com/uptimy/mcp/internal/upstream"
 )
 
 // version is set at build time with -ldflags "-X main.version=<sha>".

@@ -15,8 +15,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/uptimy/upti.my-mcp/actions/workflows/ci.yml"><img src="https://github.com/uptimy/upti.my-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/uptimy/upti.my-mcp" alt="License"></a>
+  <a href="https://github.com/uptimy/mcp/actions/workflows/ci.yml"><img src="https://github.com/uptimy/mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/uptimy/mcp" alt="License"></a>
 </p>
 
 <p align="center">
@@ -112,7 +112,7 @@ Sign-in is OAuth 2.1 with PKCE and dynamic client registration. `https://api.upt
 ## Help & support
 
 - **Questions and setup help:** ask in [Discord](https://www.upti.my/discord), in the **#help** forum. Say which assistant you connected (Claude, ChatGPT, Cursor, ...).
-- **Bugs and feature requests:** [open an issue](https://github.com/uptimy/upti.my-mcp/issues/new/choose).
+- **Bugs and feature requests:** [open an issue](https://github.com/uptimy/mcp/issues/new/choose).
 - **Security issues:** report them privately, see [SECURITY.md](SECURITY.md).
 - **Uptimy account or billing:** [support@upti.my](mailto:support@upti.my).
 

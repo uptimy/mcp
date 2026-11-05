@@ -1,4 +1,4 @@
-module github.com/uptimy/upti.my-mcp
+module github.com/uptimy/mcp
 
 go 1.25.3
 
