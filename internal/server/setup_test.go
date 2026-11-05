@@ -21,7 +21,11 @@ func TestSuggestMonitorsMarksWhatsMonitored(t *testing.T) {
 		t.Errorf("acme.test is checked by hc-ok: %v", apex)
 	}
 	// A 404 answer isn't taken as "up": the suggestion expects 200.
-	if api["expectedStatusCode"] != float64(200) || api["alreadyMonitored"] != false || !strings.Contains(api["note"].(string), "404") {
+	if api["expectedStatusCode"] != float64(200) {
+		t.Errorf("api suggestion = %v", api)
+	}
+	// hc-down checks a health endpoint on the same host: the host is monitored.
+	if api["alreadyMonitored"] != true || api["note"] != "already checked at https://api.acme.test/health" {
 		t.Errorf("api suggestion = %v", api)
 	}
 	if ssl["type"] != "ssl" || ssl["target"] != "acme.test" || ssl["alreadyMonitored"] != false {
