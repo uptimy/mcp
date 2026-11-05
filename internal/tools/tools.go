@@ -205,7 +205,6 @@ type toolset struct {
 	pingBaseURL string
 }
 
-// Every tool sets all three hints explicitly: directories (Claude, ChatGPT)
 // addTool registers a tool with its title in annotations.title as well: the
 // Claude directory reads the listing's tool names from there.
 func addTool[In, Out any](srv *mcp.Server, tool *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
@@ -213,6 +212,7 @@ func addTool[In, Out any](srv *mcp.Server, tool *mcp.Tool, h mcp.ToolHandlerFor[
 	mcp.AddTool(srv, tool, h)
 }
 
+// Every tool sets all three hints explicitly: directories (Claude, ChatGPT)
 // review them, and ChatGPT requires explicit booleans.
 func readOnly() *mcp.ToolAnnotations {
 	f := false
