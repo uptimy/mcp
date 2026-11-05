@@ -114,7 +114,11 @@ func (t *toolset) suggestMonitors(ctx context.Context, req *mcp.CallToolRequest,
 			}
 		}
 		if spec, err := normalizeSpec(m.monitorSpec); err == nil {
-			m.AlreadyMonitored = existing[spec.key()]
+			if _, ok := existing[spec.key()]; ok {
+				m.AlreadyMonitored = true
+			} else if at, ok := existing[httpHost(spec)]; ok {
+				m.AlreadyMonitored, m.Note = true, "already checked at "+at
+			}
 		}
 		out.Suggestions = append(out.Suggestions, m)
 	}
@@ -161,7 +165,7 @@ func (t *toolset) addMonitors(ctx context.Context, req *mcp.CallToolRequest, in 
 		if err != nil {
 			return nil, addMonitorsOut{}, err
 		}
-		if existing[spec.key()] || seen[spec.key()] {
+		if _, ok := existing[spec.key()]; ok || seen[spec.key()] {
 			out.AlreadyMonitored = append(out.AlreadyMonitored, spec.Target)
 			continue
 		}
@@ -372,13 +376,15 @@ func (s monitorSpec) key() string {
 	}
 }
 
-// monitoredTargets is the key of every target the workspace already checks.
-func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest) (map[string]bool, error) {
+// monitoredTargets maps the key of every target the workspace already checks
+// to that target, plus each website/API host to a URL it's checked at (a
+// health endpoint, say), so a scan doesn't suggest the host again.
+func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest) (map[string]string, error) {
 	hcs, err := t.listHealthchecks(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	keys := map[string]bool{}
+	keys := map[string]string{}
 	for _, h := range hcs {
 		var typeName string
 		for name, id := range monitorTypes {
@@ -406,10 +412,25 @@ func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest
 			continue
 		}
 		if spec, err := normalizeSpec(spec); err == nil {
-			keys[spec.key()] = true
+			keys[spec.key()] = spec.Target
+			if host := httpHost(spec); host != "" {
+				keys[host] = spec.Target
+			}
 		}
 	}
 	return keys, nil
+}
+
+// httpHost keys a website/API check by its host alone.
+func httpHost(s monitorSpec) string {
+	if s.Type != "http" {
+		return ""
+	}
+	u, err := url.Parse(s.Target)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	return "host|" + strings.ToLower(u.Hostname())
 }
 
 // ensureTags returns the ids of the named tags, creating the missing ones
