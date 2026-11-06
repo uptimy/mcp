@@ -137,7 +137,7 @@ func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
 	addTool(srv, &mcp.Tool{
 		Name:        "add_monitors",
 		Title:       "Add monitors",
-		Description: "Add website/API checks (http), certificate expiry (ssl), open ports (tcp), ping and DNS checks, up to 20 at a time. They check from every region the plan allows, every 60s by default (ssl hourly), and alert like the workspace's other monitors. A target already checked by a monitor of the same type is skipped and listed, so calling twice is safe.",
+		Description: "Add website/API checks (http), certificate expiry (ssl), open ports (tcp), ping, DNS checks and MCP server checks (mcp), up to 20 at a time. They check from every region the plan allows, every 60s by default (ssl hourly), and alert like the workspace's other monitors. An mcp check connects to the server as an assistant would, without a key: it's up when the server answers or asks for a discoverable OAuth sign-in. A key and required tools are set in the Uptimy app. A target already checked by a monitor of the same type is skipped and listed, so calling twice is safe.",
 		Annotations: write(false, true, false),
 	}, t.addMonitors)
 
