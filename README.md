@@ -88,7 +88,7 @@ When you sign in, you pick the workspace the assistant may see. Each connection 
 | `schedule_maintenance` | Schedule a maintenance window, optionally announced on status pages |
 | `set_monitor_paused`, `trigger_check` | Pause or resume a monitor; run a check right away to confirm a fix |
 | `follow_dependency` | Follow or unfollow a third-party service, so its outages open incidents in your workspace |
-| `add_monitors`, `add_cron_monitor` | Add website, API, certificate, port, ping and DNS checks; watch a cron job with a heartbeat |
+| `add_monitors`, `add_cron_monitor` | Add website, API, certificate, port, ping, DNS and MCP server checks; watch a cron job with a heartbeat |
 | `create_status_page`, `add_to_status_page` | Create a status page (private unless you ask); show more monitors on one |
 | `add_alert`, `set_alert_paused` | Send incidents to Slack, Discord, Teams, Telegram, PagerDuty, email or a webhook; pause or resume an alert |
 | `add_report`, `update_report` | Add an uptime report, for example one per client emailed every month; change one |

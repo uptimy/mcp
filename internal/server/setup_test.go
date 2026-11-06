@@ -84,6 +84,25 @@ func TestAddMonitorsRaisesIntervalToPlanFloor(t *testing.T) {
 	}
 }
 
+// An MCP server is checked by URL, without a key; an http check of the same
+// URL doesn't make it a duplicate.
+func TestAddMonitorsMCP(t *testing.T) {
+	cs, fake, _ := setup(t)
+	out := call(t, cs, "add_monitors", map[string]any{"monitors": []any{
+		map[string]any{"type": "mcp", "target": "acme.test/"},
+		map[string]any{"type": "MCP", "target": "https://acme.test"},
+	}})
+	if skipped := out["alreadyMonitored"].([]any); len(skipped) != 1 {
+		t.Errorf("the same MCP URL twice should be added once: %v", skipped)
+	}
+	item := fake.write("POST /v1/api/healthchecks/bulk")["items"].([]any)[0].(map[string]any)
+	hc := item["healthcheck"].(map[string]any)
+	cfg := hc["config"].(map[string]any)
+	if item["applicationName"] != "acme.test MCP" || hc["healthcheckTypeId"] != float64(13) || cfg["uri"] != "https://acme.test/" || len(cfg["headers"].(map[string]any)) != 0 {
+		t.Errorf("mcp item = %v", item)
+	}
+}
+
 func TestAddMonitorsChecksTargets(t *testing.T) {
 	cs, _, _ := setup(t)
 	if msg := callErr(t, cs, "add_monitors", map[string]any{"monitors": []any{map[string]any{"type": "tcp", "target": "db.acme.test"}}}); !strings.Contains(msg, "needs a port") {

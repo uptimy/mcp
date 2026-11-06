@@ -26,16 +26,17 @@ const (
 	typeTCP  = 5
 	typeSSL  = 6
 	typeDNS  = 7
+	typeMCP  = 13
 )
 
 // The bulk route takes at most this many monitors per request.
 const maxMonitorsPerCall = 20
 
-var monitorTypes = map[string]int{"http": typeHTTP, "ssl": typeSSL, "tcp": typeTCP, "ping": typePing, "dns": typeDNS}
+var monitorTypes = map[string]int{"http": typeHTTP, "ssl": typeSSL, "tcp": typeTCP, "ping": typePing, "dns": typeDNS, "mcp": typeMCP}
 
 type monitorSpec struct {
-	Type               string   `json:"type,omitempty" jsonschema:"http (default), ssl (certificate expiry), tcp (port open), ping or dns"`
-	Target             string   `json:"target" jsonschema:"http: a URL; ssl, tcp and ping: a host; dns: a domain"`
+	Type               string   `json:"type,omitempty" jsonschema:"http (default), ssl (certificate expiry), tcp (port open), ping, dns or mcp (an MCP server)"`
+	Target             string   `json:"target" jsonschema:"http and mcp: a URL; ssl, tcp and ping: a host; dns: a domain"`
 	Name               string   `json:"name,omitempty" jsonschema:"defaults to the target"`
 	Port               int      `json:"port,omitempty" jsonschema:"tcp: required; ssl: default 443"`
 	ExpectedStatusCode int      `json:"expectedStatusCode,omitempty" jsonschema:"http: the status that means it's up (default 200)"`
@@ -262,14 +263,14 @@ func normalizeSpec(s monitorSpec) (monitorSpec, error) {
 		s.Type = "http"
 	}
 	if _, ok := monitorTypes[s.Type]; !ok {
-		return s, fmt.Errorf("unknown type %q: use http, ssl, tcp, ping or dns", s.Type)
+		return s, fmt.Errorf("unknown type %q: use http, ssl, tcp, ping, dns or mcp", s.Type)
 	}
 	target := strings.TrimSpace(s.Target)
 	if target == "" {
 		return s, errors.New("every monitor needs a target")
 	}
 
-	if s.Type == "http" {
+	if s.Type == "http" || s.Type == "mcp" {
 		if !strings.Contains(target, "://") {
 			target = "https://" + target
 		}
@@ -278,6 +279,12 @@ func normalizeSpec(s monitorSpec) (monitorSpec, error) {
 			return s, fmt.Errorf("%q isn't an http(s) URL", s.Target)
 		}
 		s.Target = u.String()
+		if s.Type == "mcp" {
+			if s.Name == "" {
+				s.Name = u.Host + " MCP"
+			}
+			return s, nil
+		}
 		if s.ExpectedStatusCode == 0 {
 			s.ExpectedStatusCode = 200
 		}
@@ -344,6 +351,10 @@ func (s monitorSpec) config() map[string]any {
 		return map[string]any{"host": s.Target, "port": s.Port}
 	case "ping":
 		return map[string]any{"host": s.Target}
+	case "mcp":
+		// Without a key: a key and required tools are set in the app, so
+		// the key never passes through a chat.
+		return map[string]any{"uri": s.Target, "headers": map[string]any{}}
 	case "dns":
 		cfg := map[string]any{"domain": s.Target, "recordType": s.RecordType}
 		var values []string
@@ -365,8 +376,8 @@ func (s monitorSpec) config() map[string]any {
 // key identifies what a monitor checks, to tell a new monitor from a duplicate.
 func (s monitorSpec) key() string {
 	switch s.Type {
-	case "http":
-		return "http|" + strings.TrimRight(strings.ToLower(s.Target), "/")
+	case "http", "mcp":
+		return s.Type + "|" + strings.TrimRight(strings.ToLower(s.Target), "/")
 	case "ssl", "tcp":
 		return s.Type + "|" + s.Target + ":" + strconv.Itoa(s.Port)
 	case "dns":
@@ -397,7 +408,7 @@ func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest
 		}
 		spec := monitorSpec{Type: typeName}
 		switch typeName {
-		case "http":
+		case "http", "mcp":
 			spec.Target, _ = h.Config["uri"].(string)
 		case "dns":
 			spec.Target, _ = h.Config["domain"].(string)
