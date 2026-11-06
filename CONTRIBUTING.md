@@ -49,6 +49,9 @@ internal/server/    HTTP: key checks (with a 3-minute cache), OAuth metadata, th
                     server instructions, request and tool call logs; the tests
 internal/tools/     the tools, one file per area (monitors, incidents, setup, alerts, reports, ...)
 internal/upstream/  the client for Uptimy's API, which turns its errors into messages a model can act on
+.cursor-plugin/, mcp.json, assets/
+                    the Cursor plugin: points Cursor at the hosted server, for the Cursor Marketplace
+server.json         the listing in the official MCP Registry (bump "version" for every change)
 ```
 
 The server is stateless. Each request carries the caller's key, and every tool calls the same `/v1/api/*` routes [uptimyctl](https://github.com/uptimy/uptimyctl) uses, with that key. There's no database and nothing to configure beyond the table above.
