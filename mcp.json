@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "uptimy": {
+      "type": "http",
+      "url": "https://mcp.upti.my/mcp"
+    }
+  }
+}
