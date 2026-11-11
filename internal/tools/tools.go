@@ -173,7 +173,7 @@ func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
 	addTool(srv, &mcp.Tool{
 		Name:        "add_alert",
 		Title:       "Add alert",
-		Description: "Send incidents (opened and/or resolved) to a connected Slack, Discord, Teams, Telegram or PagerDuty integration, to email addresses, or to a webhook, optionally only for some tags, severities or monitors. Live at once. Integrations are connected in the Uptimy app; list_alerts shows which are. If an alert with this name exists, returns it instead of adding another.",
+		Description: "Send incidents (opened and/or resolved) to a connected Slack, Discord, Teams, Telegram or PagerDuty integration, to email addresses, or to a webhook, optionally only for some tags, severities or monitors. Live at once. Integrations are connected in the Uptimy app (Slack, Discord and Teams also by pasting the channel's webhook URL there); list_alerts shows which are. A Slack, Discord or Teams webhook URL is refused as webhookUrl: those apps only accept their own format. If an alert with this name exists, returns it instead of adding another.",
 		Annotations: write(false, true, false),
 	}, t.addAlert)
 

@@ -205,7 +205,7 @@ type addAlertIn struct {
 	Name         string   `json:"name" jsonschema:"e.g. 'Production to #ops'"`
 	Integration  string   `json:"integration,omitempty" jsonschema:"send to a connected Slack, Discord, Teams, Telegram or PagerDuty integration: its UUID or label from list_alerts, or just 'slack' when there's one"`
 	Emails       []string `json:"emails,omitempty" jsonschema:"or send emails to these addresses"`
-	WebhookURL   string   `json:"webhookUrl,omitempty" jsonschema:"or POST each incident as JSON to this https URL"`
+	WebhookURL   string   `json:"webhookUrl,omitempty" jsonschema:"or POST each incident as JSON to this https URL (not a Slack, Discord or Teams webhook: connect those in the app as integrations)"`
 	Events       []string `json:"events,omitempty" jsonschema:"opened and/or resolved (default both)"`
 	Tags         []string `json:"tags,omitempty" jsonschema:"only incidents of monitors with one of these existing tags"`
 	Severities   []string `json:"severities,omitempty" jsonschema:"only these severities: critical, high, medium, low"`
