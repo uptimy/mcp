@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// An existing keyword monitor is recognised, so adding the same one again is
+// An existing keyword monitor is recognized, so adding the same one again is
 // skipped as a duplicate while a plain check of the URL stays a separate key.
 func TestHTTPConfigKeyword(t *testing.T) {
 	var cfg map[string]any
