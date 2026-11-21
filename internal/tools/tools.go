@@ -387,21 +387,40 @@ func (t *toolset) findMonitor(ctx context.Context, req *mcp.CallToolRequest, uui
 var sensitive = []string{"header", "auth", "password", "secret", "token", "cookie", "key", "body", "script", "credential"}
 
 func redactConfig(cfg map[string]any) map[string]any {
-	out := make(map[string]any, len(cfg))
-	for k, v := range cfg {
-		lk := strings.ToLower(k)
-		hidden := false
-		for _, s := range sensitive {
-			if strings.Contains(lk, s) {
-				hidden = true
-				break
-			}
-		}
-		if hidden {
-			out[k] = "[redacted]"
-			continue
-		}
-		out[k] = v
-	}
+	out, _ := redactValue(cfg).(map[string]any)
 	return out
+}
+
+// redactValue hides sensitive keys at any depth: an HTTP check keeps its
+// headers and body under steps[].request.
+func redactValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, child := range val {
+			if isSensitive(k) {
+				out[k] = "[redacted]"
+				continue
+			}
+			out[k] = redactValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, child := range val {
+			out[i] = redactValue(child)
+		}
+		return out
+	}
+	return v
+}
+
+func isSensitive(key string) bool {
+	lk := strings.ToLower(key)
+	for _, s := range sensitive {
+		if strings.Contains(lk, s) {
+			return true
+		}
+	}
+	return false
 }
