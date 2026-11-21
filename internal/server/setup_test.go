@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -59,7 +60,7 @@ func TestAddMonitorsUsesSetupDefaults(t *testing.T) {
 	if http["intervalSeconds"] != float64(60) || http["healthcheckTypeId"] != float64(1) || len(http["schedulers"].([]any)) != 2 {
 		t.Errorf("http healthcheck = %v", http)
 	}
-	if cfg := http["config"].(map[string]any); cfg["uri"] != "https://api.acme.test" || cfg["expectedStatusCode"] != float64(200) || cfg["method"] != "GET" {
+	if cfg := http["config"].(map[string]any); cfg["uri"] != "https://api.acme.test" || cfg["method"] != "GET" || fmt.Sprint(cfg["assertions"]) != "[map[op:eq source:status value:200]]" || len(cfg) != 3 {
 		t.Errorf("http config = %v", cfg)
 	}
 	ssl := items[1].(map[string]any)
