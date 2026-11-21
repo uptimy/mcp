@@ -40,6 +40,8 @@ type monitorSpec struct {
 	Name               string   `json:"name,omitempty" jsonschema:"defaults to the target"`
 	Port               int      `json:"port,omitempty" jsonschema:"tcp: required; ssl: default 443"`
 	ExpectedStatusCode int      `json:"expectedStatusCode,omitempty" jsonschema:"http: the status that means it's up (default 200)"`
+	Keyword            string   `json:"keyword,omitempty" jsonschema:"http: text the response must contain, e.g. Add to cart (a keyword monitor); case-sensitive"`
+	KeywordMode        string   `json:"keywordMode,omitempty" jsonschema:"http with keyword: contains (default), or absent to alert when the text appears instead, e.g. Maintenance"`
 	RecordType         string   `json:"recordType,omitempty" jsonschema:"dns: A (default), AAAA, CNAME, MX, TXT or NS"`
 	ExpectedValues     []string `json:"expectedValues,omitempty" jsonschema:"dns: values that must appear in the records (part of a record is enough, e.g. v=spf1)"`
 }
@@ -270,6 +272,9 @@ func normalizeSpec(s monitorSpec) (monitorSpec, error) {
 		return s, errors.New("every monitor needs a target")
 	}
 
+	if s.Type != "http" && (s.Keyword != "" || s.KeywordMode != "") {
+		return s, errors.New("keyword is for http monitors")
+	}
 	if s.Type == "http" || s.Type == "mcp" {
 		if !strings.Contains(target, "://") {
 			target = "https://" + target
@@ -287,6 +292,16 @@ func normalizeSpec(s monitorSpec) (monitorSpec, error) {
 		}
 		if s.ExpectedStatusCode == 0 {
 			s.ExpectedStatusCode = 200
+		}
+		s.KeywordMode = strings.ToLower(strings.TrimSpace(s.KeywordMode))
+		if s.Keyword == "" && s.KeywordMode != "" {
+			return s, errors.New("keywordMode needs a keyword")
+		}
+		if s.Keyword != "" && s.KeywordMode == "" {
+			s.KeywordMode = "contains"
+		}
+		if s.KeywordMode != "" && s.KeywordMode != "contains" && s.KeywordMode != "absent" {
+			return s, fmt.Errorf("keywordMode %q: use contains or absent", s.KeywordMode)
 		}
 		if s.Name == "" {
 			s.Name = strings.TrimSuffix(u.Host+u.Path, "/")
@@ -370,8 +385,19 @@ func (s monitorSpec) config() map[string]any {
 	default:
 		// The API's short form of an HTTP check: it stores it as one step.
 		cfg := map[string]any{"method": "GET", "uri": s.Target}
+		var assertions []any
 		if s.ExpectedStatusCode > 0 {
-			cfg["assertions"] = []any{map[string]any{"source": "status", "op": "eq", "value": s.ExpectedStatusCode}}
+			assertions = append(assertions, map[string]any{"source": "status", "op": "eq", "value": s.ExpectedStatusCode})
+		}
+		if s.Keyword != "" {
+			op := "contains"
+			if s.KeywordMode == "absent" {
+				op = "not_contains"
+			}
+			assertions = append(assertions, map[string]any{"source": "body", "op": op, "value": s.Keyword})
+		}
+		if len(assertions) > 0 {
+			cfg["assertions"] = assertions
 		}
 		return cfg
 	}
@@ -381,7 +407,12 @@ func (s monitorSpec) config() map[string]any {
 func (s monitorSpec) key() string {
 	switch s.Type {
 	case "http", "mcp":
-		return s.Type + "|" + strings.TrimRight(strings.ToLower(s.Target), "/")
+		key := s.Type + "|" + strings.TrimRight(strings.ToLower(s.Target), "/")
+		if s.Keyword != "" {
+			// A keyword monitor on a URL that's already checked is a new monitor.
+			key += "|" + s.KeywordMode + "|" + s.Keyword
+		}
+		return key
 	case "ssl", "tcp":
 		return s.Type + "|" + s.Target + ":" + strconv.Itoa(s.Port)
 	case "dns":
@@ -414,6 +445,7 @@ func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest
 		switch typeName {
 		case "http":
 			spec.Target = httpConfigTarget(h.Config)
+			spec.Keyword, spec.KeywordMode = httpConfigKeyword(h.Config)
 		case "mcp":
 			spec.Target, _ = h.Config["uri"].(string)
 		case "dns":
@@ -450,6 +482,31 @@ func httpConfigTarget(config map[string]any) string {
 	}
 	uri, _ := config["uri"].(string)
 	return uri
+}
+
+// httpConfigKeyword is the first body check of an HTTP check's first step,
+// as add_monitors writes a keyword monitor: (keyword, contains|absent).
+func httpConfigKeyword(config map[string]any) (string, string) {
+	steps, _ := config["steps"].([]any)
+	if len(steps) == 0 {
+		return "", ""
+	}
+	step, _ := steps[0].(map[string]any)
+	assertions, _ := step["assertions"].([]any)
+	for _, a := range assertions {
+		m, _ := a.(map[string]any)
+		value, _ := m["value"].(string)
+		if m["source"] != "body" || value == "" {
+			continue
+		}
+		switch m["op"] {
+		case "contains":
+			return value, "contains"
+		case "not_contains":
+			return value, "absent"
+		}
+	}
+	return "", ""
 }
 
 func httpHost(s monitorSpec) string {
