@@ -408,7 +408,9 @@ func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest
 		}
 		spec := monitorSpec{Type: typeName}
 		switch typeName {
-		case "http", "mcp":
+		case "http":
+			spec.Target = httpConfigTarget(h.Config)
+		case "mcp":
 			spec.Target, _ = h.Config["uri"].(string)
 		case "dns":
 			spec.Target, _ = h.Config["domain"].(string)
@@ -433,6 +435,19 @@ func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest
 }
 
 // httpHost keys a website/API check by its host alone.
+// httpConfigTarget is an HTTP check's URL: its first step's, or the flat
+// config's uri for checks stored before the steps shape.
+func httpConfigTarget(config map[string]any) string {
+	if steps, ok := config["steps"].([]any); ok && len(steps) > 0 {
+		step, _ := steps[0].(map[string]any)
+		request, _ := step["request"].(map[string]any)
+		uri, _ := request["uri"].(string)
+		return uri
+	}
+	uri, _ := config["uri"].(string)
+	return uri
+}
+
 func httpHost(s monitorSpec) string {
 	if s.Type != "http" {
 		return ""
