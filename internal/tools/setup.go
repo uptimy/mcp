@@ -368,8 +368,12 @@ func (s monitorSpec) config() map[string]any {
 		}
 		return cfg
 	default:
-		return map[string]any{"method": "GET", "uri": s.Target, "expectedStatusCode": s.ExpectedStatusCode,
-			"body": map[string]any{}, "headers": map[string]any{}, "expectedResponseBody": map[string]any{}, "proxyUrl": ""}
+		// The API's short form of an HTTP check: it stores it as one step.
+		cfg := map[string]any{"method": "GET", "uri": s.Target}
+		if s.ExpectedStatusCode > 0 {
+			cfg["assertions"] = []any{map[string]any{"source": "status", "op": "eq", "value": s.ExpectedStatusCode}}
+		}
+		return cfg
 	}
 }
 
@@ -436,7 +440,7 @@ func (t *toolset) monitoredTargets(ctx context.Context, req *mcp.CallToolRequest
 
 // httpHost keys a website/API check by its host alone.
 // httpConfigTarget is an HTTP check's URL: its first step's, or the flat
-// config's uri for checks stored before the steps shape.
+// config's uri for an agent-mirrored check (agents keep their own config).
 func httpConfigTarget(config map[string]any) string {
 	if steps, ok := config["steps"].([]any); ok && len(steps) > 0 {
 		step, _ := steps[0].(map[string]any)
