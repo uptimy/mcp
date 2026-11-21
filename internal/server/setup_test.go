@@ -183,3 +183,44 @@ func TestAddToStatusPageKeepsRowsAndSkipsShownOnes(t *testing.T) {
 		t.Errorf("added row = %v", added)
 	}
 }
+
+// A keyword monitor is an http check with a body assertion. On a URL that's
+// already checked it's a new monitor, not a duplicate.
+func TestAddMonitorsKeyword(t *testing.T) {
+	cs, fake, _ := setup(t)
+	out := call(t, cs, "add_monitors", map[string]any{
+		"monitors": []any{
+			map[string]any{"target": "https://acme.test/", "keyword": "Add to cart", "name": "Shop has a cart"},
+			map[string]any{"target": "https://acme.test/", "keyword": "Maintenance", "keywordMode": "absent"},
+		},
+	})
+	if skipped := out["alreadyMonitored"].([]any); len(skipped) != 0 {
+		t.Errorf("keyword monitors were skipped as duplicates: %v", skipped)
+	}
+	items := fake.write("POST /v1/api/healthchecks/bulk")["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("bulk items = %d, want 2", len(items))
+	}
+	cfg := func(i int) string {
+		return fmt.Sprint(items[i].(map[string]any)["healthcheck"].(map[string]any)["config"].(map[string]any)["assertions"])
+	}
+	if got := cfg(0); got != "[map[op:eq source:status value:200] map[op:contains source:body value:Add to cart]]" {
+		t.Errorf("contains config = %s", got)
+	}
+	if got := cfg(1); got != "[map[op:eq source:status value:200] map[op:not_contains source:body value:Maintenance]]" {
+		t.Errorf("absent config = %s", got)
+	}
+}
+
+func TestAddMonitorsKeywordNeedsHTTP(t *testing.T) {
+	cs, _, _ := setup(t)
+	for want, m := range map[string]map[string]any{
+		"keyword is for http monitors": {"type": "ssl", "target": "acme.test", "keyword": "x"},
+		"keywordMode needs a keyword":  {"target": "acme.test", "keywordMode": "absent"},
+		"use contains or absent":       {"target": "acme.test", "keyword": "x", "keywordMode": "maybe"},
+	} {
+		if got := callErr(t, cs, "add_monitors", map[string]any{"monitors": []any{m}}); !strings.Contains(got, want) {
+			t.Errorf("%v: error %q, want %q", m, got, want)
+		}
+	}
+}
