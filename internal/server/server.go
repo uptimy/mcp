@@ -75,6 +75,8 @@ func New(up *upstream.Client, cfg Config) http.Handler {
 	mux.Handle(metadataPath, metadata)
 	// Clients that don't read the 401 header look here first.
 	mux.Handle("/.well-known/oauth-protected-resource", metadata)
+	mux.Handle(serverCardPath, staticJSON(serverCardType, serverCard(publicURL)))
+	mux.Handle(aiCatalogPath, staticJSON(aiCatalogType, aiCatalog(publicURL)))
 	if token := strings.TrimSpace(cfg.OpenAIAppsChallenge); token != "" {
 		mux.HandleFunc("GET /.well-known/openai-apps-challenge", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
