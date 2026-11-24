@@ -20,12 +20,14 @@ import (
 
 const goodKey = "upt_good"
 
-// fakeUpstream serves the api, workflows and heartbeat routes the tools call
-// (one server stands in for all three) and records every write.
+// fakeUpstream serves the api, workflows, heartbeat, reports and analytics
+// routes the tools call (one server stands in for all of them) and records
+// every write.
 type fakeUpstream struct {
 	mu         sync.Mutex
 	writes     map[string]map[string]any // "METHOD path" -> body
 	queries    map[string]url.Values     // path -> last query
+	calls      map[string]int            // "METHOD path" -> requests
 	keyLookups int
 }
 
@@ -40,6 +42,10 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.queries = map[string]url.Values{}
 	}
 	f.queries[r.URL.Path] = r.URL.Query()
+	if f.calls == nil {
+		f.calls = map[string]int{}
+	}
+	f.calls[r.Method+" "+r.URL.Path]++
 	f.mu.Unlock()
 	if r.URL.Path == "/v1/api/api-key" {
 		f.mu.Lock()
@@ -59,16 +65,23 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{"uuid":"hc-ok","active":true,"intervalSeconds":60,"healthcheckTypeId":1,"applicationUuid":"app-ok","config":{"uri":"https://acme.test"},"healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-ok","name":"Website","status":"Healthy"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}],"analyticsDailyRegionRollups":[{"huge":"payload"}]},
 			{"uuid":"hc-down","active":true,"intervalSeconds":30,"healthcheckTypeId":1,"applicationUuid":"app-down","config":{"steps":[{"name":"request","request":{"method":"GET","uri":"https://api.acme.test/health"},"assertions":[{"source":"status","op":"eq","value":200}]}]},"healthcheckType":{"id":1,"name":"HTTP"},"application":{"uuid":"app-down","name":"Checkout API","status":"Down","lastStatusUpdate":"2026-10-06T10:00:00Z"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"}]}]}`,
 		"GET /v1/api/healthchecks/hc-down": `{"uuid":"hc-down","active":true,"intervalSeconds":30,"timeoutSeconds":10,"healthcheckTypeId":1,"config":{"url":"https://acme.test/checkout","headers":{"Authorization":"Bearer secret"}},"application":{"uuid":"app-down","name":"Checkout API","status":"Down"},"schedulers":[{"uuid":"s-fra","name":"Frankfurt"},{"uuid":"s-sin","name":"Singapore"}],"tags":[{"id":7,"name":"prod"}]}`,
-		"GET /v1/api/healthchecks/hc-down/analytics/minute-region": `{"results":[
-			{"minuteBucket":"2026-10-06T10:00:00Z","schedulerUuid":"s-fra","totalCount":"2","successCount":"1","failureCount":"1","latencySumUs":"400000","latencyMaxUs":"300000","latencyP95Us":"300000"},
-			{"minuteBucket":"2026-10-06T10:00:00Z","schedulerUuid":"s-sin","totalCount":"2","successCount":"2","failureCount":"0","latencySumUs":"200000","latencyMaxUs":"120000","latencyP95Us":"110000"}]}`,
-		// upti.my-analytics (the same fake): failed runs and their causes.
+		// upti.my-analytics (the same fake): the range's figures, its series,
+		// failed runs and their causes. The summary's from is where the plan's
+		// history starts, whatever from was asked for.
 		"GET /v1/api/healthchecks/hc-down/results": `{"results":[
 			{"checkedAt":"2026-10-06T10:00:10.000Z","schedulerUuid":"s-fra","trigger":"scheduled","success":false,"attempts":2,"responseTimeMs":300,"statusCode":503,"errorClass":"http_5xx","errorMessage":"expected status 200, got 503"},
 			{"checkedAt":"2026-10-06T09:40:00.000Z","schedulerUuid":"s-sin","trigger":"confirmation","success":false,"attempts":1,"responseTimeMs":null,"statusCode":null,"errorClass":"timeout","errorMessage":null}],"nextCursor":null}`,
-		"GET /v1/api/healthchecks/hc-down/summary": `{"checks":4,"failureCauses":[
+		"GET /v1/api/healthchecks/hc-down/summary": `{"from":"2026-10-06T09:00:00.000Z","to":"2026-10-06T11:00:00.000Z",
+			"checks":4,"successes":2,"failures":2,"uptime":50,"latencySamples":3,"latencySumMs":450,"latencyAvgMs":150,"latencyMinMs":40,"latencyMaxMs":300,"latencyP50Ms":110,"latencyP95Ms":290,"latencyP99Ms":298,
+			"lastFailureAt":"2026-10-06T10:00:10.000Z","failureCauses":[
 			{"errorClass":"http_5xx","statusCode":503,"failures":1,"regions":1,"lastAt":"2026-10-06T10:00:10.000Z","errorMessage":"expected status 200, got 503"},
-			{"errorClass":"timeout","statusCode":null,"failures":1,"regions":1,"lastAt":"2026-10-06T09:40:00.000Z","errorMessage":null}]}`,
+			{"errorClass":"timeout","statusCode":null,"failures":1,"regions":1,"lastAt":"2026-10-06T09:40:00.000Z","errorMessage":null}],
+			"regions":[
+			{"schedulerUuid":"s-sin","checks":2,"successes":1,"failures":1,"uptime":50,"latencySamples":1,"latencySumMs":40,"latencyAvgMs":40,"latencyMinMs":40,"latencyMaxMs":40,"latencyP50Ms":40,"latencyP95Ms":40,"latencyP99Ms":40,"lastFailureAt":"2026-10-06T09:40:00.000Z"},
+			{"schedulerUuid":"s-fra","checks":2,"successes":1,"failures":1,"uptime":50,"latencySamples":2,"latencySumMs":410,"latencyAvgMs":205,"latencyMinMs":110,"latencyMaxMs":300,"latencyP50Ms":205,"latencyP95Ms":290,"latencyP99Ms":298,"lastFailureAt":"2026-10-06T10:00:10.000Z"}]}`,
+		"GET /v1/api/healthchecks/hc-down/series": `{"from":"2026-10-06T09:00:00.000Z","to":"2026-10-06T11:00:00.000Z","step":"1h","tz":"UTC","buckets":[
+			{"at":"2026-10-06T09:00:00Z","checks":1,"successes":0,"failures":1,"uptime":0,"latencySamples":0,"latencySumMs":0,"latencyAvgMs":null,"latencyMinMs":null,"latencyMaxMs":null,"latencyP50Ms":null,"latencyP95Ms":null,"latencyP99Ms":null},
+			{"at":"2026-10-06T10:00:00Z","checks":3,"successes":2,"failures":1,"uptime":66.66666666666667,"latencySamples":3,"latencySumMs":450,"latencyAvgMs":150,"latencyMinMs":40,"latencyMaxMs":300,"latencyP50Ms":110,"latencyP95Ms":290,"latencyP99Ms":298}]}`,
 		"GET /v1/api/heartbeat-monitors/":        `{"results":[{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"statusSnapshot":{"status":"Down","lastPingAt":"2026-10-05T01:00:00Z"}}]}`,
 		"GET /v1/api/heartbeat-monitors/hb-1":    `{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"graceSeconds":600,"credential":{"publicId":"pub123"},"steps":[],"statusSnapshot":{"status":"Down"}}`,
 		"GET /v1/api/heartbeat-monitors/hb-cron": `{"uuid":"hb-cron","name":"Weekday report","intervalSeconds":0,"cron":"0 9 * * 1-5","timezone":"Europe/Berlin","graceSeconds":600,"credential":{"publicId":"pub456"},"steps":[],"statusSnapshot":{"status":"Healthy"}}`,
@@ -155,6 +168,12 @@ func (f *fakeUpstream) lastQuery(path string) url.Values {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.queries[path]
+}
+
+func (f *fakeUpstream) callCount(key string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls[key]
 }
 
 func (f *fakeUpstream) write(key string) map[string]any {
@@ -336,25 +355,60 @@ func TestGetMonitorRedactsSecretsAndFallsBackToHeartbeat(t *testing.T) {
 	}
 }
 
-func TestMonitorMetricsSummarizesRollups(t *testing.T) {
+func TestMonitorMetricsReadsAnalytics(t *testing.T) {
 	cs, fake, _ := setup(t)
 	out := call(t, cs, "get_monitor_metrics", map[string]any{"uuid": "hc-down", "from": "2026-10-06T09:00:00Z", "to": "2026-10-06T11:00:00Z"})
 
-	if out["resolution"] != "minute" {
-		t.Errorf("resolution = %v", out["resolution"])
+	if out["from"] != "2026-10-06T09:00:00Z" || out["to"] != "2026-10-06T11:00:00Z" || out["resolution"] != "hour" {
+		t.Errorf("from, to, resolution = %v, %v, %v", out["from"], out["to"], out["resolution"])
+	}
+	// One summary for the totals, the regions and the failure causes.
+	if n := fake.callCount("GET /v1/api/healthchecks/hc-down/summary"); n != 1 {
+		t.Errorf("summary called %d times, want 1", n)
+	}
+	if q := fake.lastQuery("/v1/api/healthchecks/hc-down/summary"); q.Get("by") != "scheduler" ||
+		q.Get("from") != "2026-10-06T09:00:00Z" || q.Get("to") != "2026-10-06T11:00:00Z" {
+		t.Errorf("summary query = %v", q)
 	}
 	overall := out["overall"].(map[string]any)
-	if overall["checks"] != 4.0 || overall["failures"] != 1.0 || overall["uptimePercent"] != 75.0 || overall["avgLatencyMs"] != 150.0 {
+	if overall["checks"] != 4.0 || overall["failures"] != 2.0 || overall["uptimePercent"] != 50.0 || overall["avgLatencyMs"] != 150.0 ||
+		overall["p50LatencyMs"] != 110.0 || overall["p95LatencyMs"] != 290.0 || overall["p99LatencyMs"] != 298.0 || overall["maxLatencyMs"] != 300.0 {
 		t.Errorf("overall = %v", overall)
 	}
+	// Regions by name, with their own percentiles.
+	regions := out["regions"].([]any)
+	if len(regions) != 2 {
+		t.Fatalf("regions = %v", regions)
+	}
+	fra, sin := regions[0].(map[string]any), regions[1].(map[string]any)
+	if fra["region"] != "Frankfurt" || fra["p95LatencyMs"] != 290.0 || fra["avgLatencyMs"] != 205.0 ||
+		sin["region"] != "Singapore" || sin["checks"] != 2.0 || sin["uptimePercent"] != 50.0 {
+		t.Errorf("regions = %v", regions)
+	}
+	// An hour step for two hours; a bucket without response times has no
+	// latency rather than 0 ms.
+	if q := fake.lastQuery("/v1/api/healthchecks/hc-down/series"); q.Get("step") != "1h" ||
+		q.Get("from") != "2026-10-06T09:00:00Z" || q.Get("to") != "2026-10-06T11:00:00Z" || q.Get("by") != "" {
+		t.Errorf("series query = %v", q)
+	}
+	series := out["series"].([]any)
+	if len(series) != 2 {
+		t.Fatalf("series = %v", series)
+	}
+	first, second := series[0].(map[string]any), series[1].(map[string]any)
+	if _, ok := first["p95LatencyMs"]; ok || first["start"] != "2026-10-06T09:00:00Z" || first["uptimePercent"] != 0.0 ||
+		second["start"] != "2026-10-06T10:00:00Z" || second["uptimePercent"] != 66.67 || second["p95LatencyMs"] != 290.0 {
+		t.Errorf("series = %v", series)
+	}
+
 	// Failures come from analytics over the whole range, newest first.
 	failures := out["recentFailures"].([]any)
 	if len(failures) != 2 {
 		t.Fatalf("recentFailures = %v", failures)
 	}
-	first, second := failures[0].(map[string]any), failures[1].(map[string]any)
-	if first["region"] != "Frankfurt" || first["trigger"] != "scheduled" || first["statusCode"] != 503.0 ||
-		first["error"] != "expected status 200, got 503" || second["region"] != "Singapore" || second["error"] != "timeout" || second["responseTimeMs"] != nil {
+	newest, older := failures[0].(map[string]any), failures[1].(map[string]any)
+	if newest["region"] != "Frankfurt" || newest["trigger"] != "scheduled" || newest["statusCode"] != 503.0 ||
+		newest["error"] != "expected status 200, got 503" || older["region"] != "Singapore" || older["error"] != "timeout" || older["responseTimeMs"] != nil {
 		t.Errorf("recentFailures = %v", failures)
 	}
 	// The newest 10 failures, over the whole range, not only its last hour.
@@ -369,6 +423,25 @@ func TestMonitorMetricsSummarizesRollups(t *testing.T) {
 	if causes[0].(map[string]any)["cause"] != "HTTP 503" || causes[1].(map[string]any)["cause"] != "timeout" ||
 		causes[0].(map[string]any)["failures"] != 1.0 {
 		t.Errorf("failureCauses = %v", causes)
+	}
+}
+
+func TestMonitorMetricsStartsWhereThePlanHistoryDoes(t *testing.T) {
+	cs, fake, _ := setup(t)
+	// Two months asked for; the plan's history (the fake summary's from)
+	// starts two hours before to, so the series is hourly, not monthly.
+	out := call(t, cs, "get_monitor_metrics", map[string]any{"uuid": "hc-down", "from": "2026-08-06T11:00:00Z", "to": "2026-10-06T11:00:00Z"})
+
+	if out["from"] != "2026-10-06T09:00:00Z" || out["resolution"] != "hour" {
+		t.Errorf("from, resolution = %v, %v", out["from"], out["resolution"])
+	}
+	for _, path := range []string{"/v1/api/healthchecks/hc-down/series", "/v1/api/healthchecks/hc-down/results"} {
+		if q := fake.lastQuery(path); q.Get("from") != "2026-10-06T09:00:00Z" {
+			t.Errorf("%s from = %v", path, q.Get("from"))
+		}
+	}
+	if q := fake.lastQuery("/v1/api/healthchecks/hc-down/series"); q.Get("step") != "1h" {
+		t.Errorf("series step = %v", q.Get("step"))
 	}
 }
 

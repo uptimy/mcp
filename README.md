@@ -75,7 +75,7 @@ When you sign in, you pick the workspace the assistant may see. Each connection 
 |---|---|
 | `get_status_overview` | Every monitor, cron job monitor, open incident, status page and followed third-party service, problems first |
 | `get_monitor` | One monitor's target, schedule, regions and current status |
-| `get_monitor_metrics` | Uptime and latency over a time range, per region, with the latest failed checks, their errors and the range's failure causes |
+| `get_monitor_metrics` | Uptime and latency percentiles (p50, p95, p99) over a time range, per region and as a time series, with the latest failed checks, their errors and the range's failure causes |
 | `list_incidents`, `get_incident` | Recent incidents, and one incident with its timeline |
 | `get_dependencies` | The third-party services Uptimy measures, their status, and which ones you follow |
 | `list_reports`, `get_uptime_report` | Your uptime reports, and availability against the SLA target for any period |

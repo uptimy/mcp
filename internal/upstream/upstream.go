@@ -18,8 +18,8 @@ import (
 
 // Service picks which backend a request goes to. Incidents and maintenances
 // live on workflows, heartbeats on the heartbeat service, uptime reports on
-// the reports service, check history (results and their summary) on
-// analytics, everything else on api.
+// the reports service, check history (results, summaries and time series)
+// on analytics, everything else on api.
 type Service int
 
 const (
@@ -27,7 +27,8 @@ const (
 	Workflows
 	Heartbeats
 	Reports
-	// Analytics is monitoring history: check results and their summary.
+	// Analytics is monitoring history: check results, summaries and time
+	// series.
 	Analytics
 )
 
