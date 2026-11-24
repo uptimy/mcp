@@ -15,7 +15,7 @@ func TestPlanErrorsReadAsPlanErrors(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":"FEATURE_NOT_AVAILABLE.400","error":"This feature is not available in your subscription"}`))
 	}))
 	defer srv.Close()
-	err := New(srv.URL, srv.URL, srv.URL, srv.URL).Do(context.Background(), "upt_x", Reports, http.MethodGet, "/v1/api/reports/range", nil, nil, nil)
+	err := New(srv.URL, srv.URL, srv.URL, srv.URL, srv.URL).Do(context.Background(), "upt_x", Reports, http.MethodGet, "/v1/api/reports/range", nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "higher plan") {
 		t.Fatalf("got %v, want a plan error", err)
 	}

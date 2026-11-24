@@ -18,7 +18,8 @@ import (
 
 // Service picks which backend a request goes to. Incidents and maintenances
 // live on workflows, heartbeats on the heartbeat service, uptime reports on
-// the reports service, everything else on api.
+// the reports service, check history (results and their summary) on
+// analytics, everything else on api.
 type Service int
 
 const (
@@ -26,6 +27,8 @@ const (
 	Workflows
 	Heartbeats
 	Reports
+	// Analytics is monitoring history: check results and their summary.
+	Analytics
 )
 
 type Client struct {
@@ -33,10 +36,10 @@ type Client struct {
 	base map[Service]string
 }
 
-func New(apiURL, workflowsURL, heartbeatsURL, reportsURL string) *Client {
+func New(apiURL, workflowsURL, heartbeatsURL, reportsURL, analyticsURL string) *Client {
 	return &Client{
 		http: &http.Client{Timeout: 30 * time.Second},
-		base: map[Service]string{API: apiURL, Workflows: workflowsURL, Heartbeats: heartbeatsURL, Reports: reportsURL},
+		base: map[Service]string{API: apiURL, Workflows: workflowsURL, Heartbeats: heartbeatsURL, Reports: reportsURL, Analytics: analyticsURL},
 	}
 }
 

@@ -19,9 +19,6 @@ import (
 const (
 	maxSeriesPoints   = 48
 	maxRecentFailures = 10
-	// Raw executions are fetched only for this much of the range's tail:
-	// a day of 30s checks from six regions is ~17k rows.
-	failureWindow = time.Hour
 )
 
 type metricsIn struct {
@@ -51,10 +48,26 @@ type seriesPoint struct {
 }
 
 type failure struct {
-	At             string  `json:"at"`
-	Region         string  `json:"region"`
-	ResponseTimeMs float64 `json:"responseTimeMs"`
-	Error          string  `json:"error"`
+	At     string `json:"at"`
+	Region string `json:"region"`
+	// Trigger is scheduled, or confirmation (a recheck after a failure), or
+	// manual.
+	Trigger        string   `json:"trigger"`
+	ResponseTimeMs *float64 `json:"responseTimeMs,omitempty"`
+	StatusCode     *int     `json:"statusCode,omitempty"`
+	Error          string   `json:"error"`
+}
+
+// cause is one kind of failure in the range: an HTTP status or an error
+// class, how often, where and when last.
+type cause struct {
+	Cause      string `json:"cause"`
+	ErrorClass string `json:"errorClass,omitempty"`
+	StatusCode *int   `json:"statusCode,omitempty"`
+	Failures   int    `json:"failures"`
+	Regions    int    `json:"regions"`
+	LastAt     string `json:"lastAt"`
+	Example    string `json:"example,omitempty"`
 }
 
 type metricsOut struct {
@@ -68,6 +81,7 @@ type metricsOut struct {
 	Regions        []regionStats `json:"regions"`
 	Series         []seriesPoint `json:"series"`
 	RecentFailures []failure     `json:"recentFailures"`
+	FailureCauses  []cause       `json:"failureCauses"`
 }
 
 // num decodes MySQL BIGINT/DECIMAL columns, which arrive as JSON strings.
@@ -112,12 +126,28 @@ func (r rollup) bucket() string {
 	}
 }
 
-type execution struct {
-	CheckedAt      string `json:"checkedAt"`
-	Scheduler      string `json:"schedulerUuid"`
-	Success        bool   `json:"success"`
-	ResponseTimeMs num    `json:"responseTimeMs"`
-	ErrorMessage   string `json:"errorMessage"`
+// result is one check run from upti.my-analytics (…/results).
+type result struct {
+	CheckedAt      string   `json:"checkedAt"`
+	Scheduler      string   `json:"schedulerUuid"`
+	Trigger        string   `json:"trigger"`
+	ResponseTimeMs *float64 `json:"responseTimeMs"`
+	StatusCode     *int     `json:"statusCode"`
+	ErrorClass     *string  `json:"errorClass"`
+	ErrorMessage   *string  `json:"errorMessage"`
+}
+
+// failureSummary is upti.my-analytics' summary of a range (…/summary): its
+// failures by status code and error class, scheduled checks only.
+type failureSummary struct {
+	FailureCauses []struct {
+		ErrorClass   *string `json:"errorClass"`
+		StatusCode   *int    `json:"statusCode"`
+		Failures     int     `json:"failures"`
+		Regions      int     `json:"regions"`
+		LastAt       string  `json:"lastAt"`
+		ErrorMessage *string `json:"errorMessage"`
+	} `json:"failureCauses"`
 }
 
 // resolution picks the coarsest rollup that still gives a useful series.
@@ -192,13 +222,20 @@ func (t *toolset) monitorMetrics(ctx context.Context, req *mcp.CallToolRequest, 
 		}
 	}
 
-	var execs upstream.Results[execution]
-	failFrom := to.Add(-failureWindow)
-	if failFrom.Before(from) {
-		failFrom = from
+	// Failures from upti.my-analytics, over the whole range (as far back as
+	// the plan's history window): the newest runs that failed, and the kinds
+	// of failure.
+	q = url.Values{"from": {from.Format(time.RFC3339)}, "to": {to.Format(time.RFC3339)}}
+	history := "/v1/api/healthchecks/" + url.PathEscape(hc.UUID)
+	var failed struct {
+		Results []result `json:"results"`
 	}
-	q = url.Values{"from": {failFrom.Format(time.RFC3339)}, "to": {to.Format(time.RFC3339)}}
-	if err := t.call(ctx, req, upstream.API, http.MethodGet, base+"executions", q, nil, &execs); err != nil {
+	fq := url.Values{"from": q["from"], "to": q["to"], "outcome": {"failure"}, "limit": {strconv.Itoa(maxRecentFailures)}}
+	if err := t.call(ctx, req, upstream.Analytics, http.MethodGet, history+"/results", fq, nil, &failed); err != nil {
+		return nil, metricsOut{}, err
+	}
+	var sum failureSummary
+	if err := t.call(ctx, req, upstream.Analytics, http.MethodGet, history+"/summary", q, nil, &sum); err != nil {
 		return nil, metricsOut{}, err
 	}
 
@@ -206,10 +243,11 @@ func (t *toolset) monitorMetrics(ctx context.Context, req *mcp.CallToolRequest, 
 	for _, s := range hc.Schedulers {
 		regionNames[s.UUID] = s.Name
 	}
-	out := summarize(rollups.Results, execs.Results, regionNames)
+	out := summarize(rollups.Results, regionNames)
+	out.RecentFailures, out.FailureCauses = failures(failed.Results, sum, regionNames)
 	out.UUID, out.Name, out.Resolution = hc.UUID, hc.Application.Name, res
 	out.From, out.To = from.Format(time.RFC3339), to.Format(time.RFC3339)
-	out.Note = "p95 values are check-weighted means of per-region p95s, not exact percentiles; recentFailures covers only the last hour of the range."
+	out.Note = "overall, regions and series p95 values are check-weighted means of per-region p95s, not exact percentiles. recentFailures (the newest 10, every kind of run) and failureCauses (scheduled checks) cover the whole range, as far back as the plan keeps history."
 	return nil, out, nil
 }
 
@@ -263,7 +301,7 @@ func (a acc) stats() stats {
 
 func round(f float64) float64 { return math.Round(f*100) / 100 }
 
-func summarize(rows []rollup, execs []execution, regionNames map[string]string) metricsOut {
+func summarize(rows []rollup, regionNames map[string]string) metricsOut {
 	region := func(uuid string) string {
 		if n := regionNames[uuid]; n != "" {
 			return n
@@ -286,7 +324,7 @@ func summarize(rows []rollup, execs []execution, regionNames map[string]string) 
 		byBucket[r.bucket()].add(r)
 	}
 
-	out := metricsOut{Overall: overall.stats(), Regions: []regionStats{}, Series: []seriesPoint{}, RecentFailures: []failure{}}
+	out := metricsOut{Overall: overall.stats(), Regions: []regionStats{}, Series: []seriesPoint{}, RecentFailures: []failure{}, FailureCauses: []cause{}}
 	for uuid, a := range byRegion {
 		out.Regions = append(out.Regions, regionStats{Region: region(uuid), stats: a.stats()})
 	}
@@ -312,14 +350,41 @@ func summarize(rows []rollup, execs []execution, regionNames map[string]string) 
 		out.Series = append(out.Series, seriesPoint{Start: buckets[i], stats: a.stats()})
 	}
 
-	for _, e := range execs {
-		if !e.Success {
-			out.RecentFailures = append(out.RecentFailures, failure{At: e.CheckedAt, Region: region(e.Scheduler), ResponseTimeMs: float64(e.ResponseTimeMs), Error: e.ErrorMessage})
-		}
-	}
-	sort.Slice(out.RecentFailures, func(i, j int) bool { return out.RecentFailures[i].At > out.RecentFailures[j].At })
-	if len(out.RecentFailures) > maxRecentFailures {
-		out.RecentFailures = out.RecentFailures[:maxRecentFailures]
-	}
 	return out
+}
+
+// failures shapes analytics' failed runs (newest first) and failure causes.
+func failures(results []result, sum failureSummary, regionNames map[string]string) ([]failure, []cause) {
+	recent := make([]failure, 0, len(results))
+	for _, r := range results {
+		region := regionNames[r.Scheduler]
+		if region == "" {
+			region = r.Scheduler
+		}
+		msg := deref(r.ErrorMessage)
+		if msg == "" {
+			msg = deref(r.ErrorClass)
+		}
+		recent = append(recent, failure{At: r.CheckedAt, Region: region, Trigger: r.Trigger, ResponseTimeMs: r.ResponseTimeMs, StatusCode: r.StatusCode, Error: msg})
+	}
+	causes := make([]cause, 0, len(sum.FailureCauses))
+	for _, c := range sum.FailureCauses {
+		name := deref(c.ErrorClass)
+		if c.StatusCode != nil {
+			name = "HTTP " + strconv.Itoa(*c.StatusCode)
+		}
+		if name == "" {
+			name = "failed"
+		}
+		causes = append(causes, cause{Cause: name, ErrorClass: deref(c.ErrorClass), StatusCode: c.StatusCode, Failures: c.Failures,
+			Regions: c.Regions, LastAt: c.LastAt, Example: deref(c.ErrorMessage)})
+	}
+	return recent, causes
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

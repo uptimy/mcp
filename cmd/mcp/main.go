@@ -34,6 +34,7 @@ func main() {
 		env("WORKFLOWS_URL", "https://workflows.upti.my"),
 		env("HEARTBEATS_URL", "https://heartbeats.upti.my"),
 		env("REPORTS_URL", "https://reports.upti.my"),
+		env("ANALYTICS_URL", "https://analytics.upti.my"),
 	)
 	srv := &http.Server{
 		Addr: ":" + env("HTTP_PORT", "8080"),
