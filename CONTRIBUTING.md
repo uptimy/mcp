@@ -36,6 +36,7 @@ Write tools change your real workspace, so try them on a workspace you don't min
 | `WORKFLOWS_URL` | `https://workflows.upti.my` | Incidents, maintenance, alerts |
 | `HEARTBEATS_URL` | `https://heartbeats.upti.my` | Cron job monitors |
 | `REPORTS_URL` | `https://reports.upti.my` | Uptime reports |
+| `ANALYTICS_URL` | `https://analytics.upti.my` | Check history: failed checks and their causes |
 | `PING_BASE_URL` | `https://ping.upti.my` | Used in the ping URLs the tools return |
 | `PUBLIC_URL` | `https://mcp.upti.my` | The OAuth resource URL |
 | `AUTHORIZATION_SERVER` | `https://api.upti.my` | Named in the protected resource metadata |

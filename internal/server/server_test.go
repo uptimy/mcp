@@ -62,9 +62,13 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"GET /v1/api/healthchecks/hc-down/analytics/minute-region": `{"results":[
 			{"minuteBucket":"2026-10-06T10:00:00Z","schedulerUuid":"s-fra","totalCount":"2","successCount":"1","failureCount":"1","latencySumUs":"400000","latencyMaxUs":"300000","latencyP95Us":"300000"},
 			{"minuteBucket":"2026-10-06T10:00:00Z","schedulerUuid":"s-sin","totalCount":"2","successCount":"2","failureCount":"0","latencySumUs":"200000","latencyMaxUs":"120000","latencyP95Us":"110000"}]}`,
-		"GET /v1/api/healthchecks/hc-down/analytics/executions": `{"results":[
-			{"checkedAt":"2026-10-06T10:00:10Z","schedulerUuid":"s-fra","success":false,"responseTimeMs":300,"errorMessage":"HTTP 503"},
-			{"checkedAt":"2026-10-06T10:00:40Z","schedulerUuid":"s-fra","success":true,"responseTimeMs":100}]}`,
+		// upti.my-analytics (the same fake): failed runs and their causes.
+		"GET /v1/api/healthchecks/hc-down/results": `{"results":[
+			{"checkedAt":"2026-10-06T10:00:10.000Z","schedulerUuid":"s-fra","trigger":"scheduled","success":false,"attempts":2,"responseTimeMs":300,"statusCode":503,"errorClass":"http_5xx","errorMessage":"expected status 200, got 503"},
+			{"checkedAt":"2026-10-06T09:40:00.000Z","schedulerUuid":"s-sin","trigger":"confirmation","success":false,"attempts":1,"responseTimeMs":null,"statusCode":null,"errorClass":"timeout","errorMessage":null}],"nextCursor":null}`,
+		"GET /v1/api/healthchecks/hc-down/summary": `{"checks":4,"failureCauses":[
+			{"errorClass":"http_5xx","statusCode":503,"failures":1,"regions":1,"lastAt":"2026-10-06T10:00:10.000Z","errorMessage":"expected status 200, got 503"},
+			{"errorClass":"timeout","statusCode":null,"failures":1,"regions":1,"lastAt":"2026-10-06T09:40:00.000Z","errorMessage":null}]}`,
 		"GET /v1/api/heartbeat-monitors/":        `{"results":[{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"statusSnapshot":{"status":"Down","lastPingAt":"2026-10-05T01:00:00Z"}}]}`,
 		"GET /v1/api/heartbeat-monitors/hb-1":    `{"uuid":"hb-1","name":"Nightly backup","intervalSeconds":86400,"graceSeconds":600,"credential":{"publicId":"pub123"},"steps":[],"statusSnapshot":{"status":"Down"}}`,
 		"GET /v1/api/heartbeat-monitors/hb-cron": `{"uuid":"hb-cron","name":"Weekday report","intervalSeconds":0,"cron":"0 9 * * 1-5","timezone":"Europe/Berlin","graceSeconds":600,"credential":{"publicId":"pub456"},"steps":[],"statusSnapshot":{"status":"Healthy"}}`,
@@ -172,7 +176,7 @@ func setup(t *testing.T) (*mcp.ClientSession, *fakeUpstream, string) {
 	fake := &fakeUpstream{writes: map[string]map[string]any{}}
 	up := httptest.NewServer(fake)
 	t.Cleanup(up.Close)
-	srv := httptest.NewServer(server.New(upstream.New(up.URL, up.URL, up.URL, up.URL), server.Config{
+	srv := httptest.NewServer(server.New(upstream.New(up.URL, up.URL, up.URL, up.URL, up.URL), server.Config{
 		PublicURL:           "https://mcp.upti.my",
 		AuthorizationServer: "https://api.upti.my",
 		PingBaseURL:         "https://ping.upti.my",
@@ -333,7 +337,7 @@ func TestGetMonitorRedactsSecretsAndFallsBackToHeartbeat(t *testing.T) {
 }
 
 func TestMonitorMetricsSummarizesRollups(t *testing.T) {
-	cs, _, _ := setup(t)
+	cs, fake, _ := setup(t)
 	out := call(t, cs, "get_monitor_metrics", map[string]any{"uuid": "hc-down", "from": "2026-10-06T09:00:00Z", "to": "2026-10-06T11:00:00Z"})
 
 	if out["resolution"] != "minute" {
@@ -343,9 +347,28 @@ func TestMonitorMetricsSummarizesRollups(t *testing.T) {
 	if overall["checks"] != 4.0 || overall["failures"] != 1.0 || overall["uptimePercent"] != 75.0 || overall["avgLatencyMs"] != 150.0 {
 		t.Errorf("overall = %v", overall)
 	}
+	// Failures come from analytics over the whole range, newest first.
 	failures := out["recentFailures"].([]any)
-	if len(failures) != 1 || failures[0].(map[string]any)["region"] != "Frankfurt" {
+	if len(failures) != 2 {
+		t.Fatalf("recentFailures = %v", failures)
+	}
+	first, second := failures[0].(map[string]any), failures[1].(map[string]any)
+	if first["region"] != "Frankfurt" || first["trigger"] != "scheduled" || first["statusCode"] != 503.0 ||
+		first["error"] != "expected status 200, got 503" || second["region"] != "Singapore" || second["error"] != "timeout" || second["responseTimeMs"] != nil {
 		t.Errorf("recentFailures = %v", failures)
+	}
+	// The newest 10 failures, over the whole range, not only its last hour.
+	if q := fake.lastQuery("/v1/api/healthchecks/hc-down/results"); q.Get("outcome") != "failure" || q.Get("limit") != "10" ||
+		q.Get("from") != "2026-10-06T09:00:00Z" || q.Get("to") != "2026-10-06T11:00:00Z" {
+		t.Errorf("results query = %v", q)
+	}
+	causes := out["failureCauses"].([]any)
+	if len(causes) != 2 {
+		t.Fatalf("failureCauses = %v", causes)
+	}
+	if causes[0].(map[string]any)["cause"] != "HTTP 503" || causes[1].(map[string]any)["cause"] != "timeout" ||
+		causes[0].(map[string]any)["failures"] != 1.0 {
+		t.Errorf("failureCauses = %v", causes)
 	}
 }
 
@@ -472,7 +495,7 @@ func TestKeyIsVerifiedOncePerSession(t *testing.T) {
 }
 
 func TestServesOpenAIAppsChallengeOnlyWhenSet(t *testing.T) {
-	up := upstream.New("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1")
+	up := upstream.New("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1")
 	for token, want := range map[string]int{"": http.StatusNotFound, "tok-123": http.StatusOK} {
 		srv := httptest.NewServer(server.New(up, server.Config{PublicURL: "https://mcp.upti.my", AuthorizationServer: "https://api.upti.my", OpenAIAppsChallenge: token}))
 		resp, err := http.Get(srv.URL + "/.well-known/openai-apps-challenge")

@@ -34,11 +34,11 @@ func TestTailStart(t *testing.T) {
 }
 
 func TestNoUptimeWithoutChecks(t *testing.T) {
-	out := summarize(nil, nil, nil)
+	out := summarize(nil, nil)
 	if out.Overall.UptimePercent != nil {
 		t.Errorf("uptime with no checks = %v, want omitted", *out.Overall.UptimePercent)
 	}
-	out = summarize([]rollup{{MinuteBucket: "2026-10-08T11:00:00Z", Total: 4, Failures: 4}}, nil, nil)
+	out = summarize([]rollup{{MinuteBucket: "2026-10-08T11:00:00Z", Total: 4, Failures: 4}}, nil)
 	if out.Overall.UptimePercent == nil || *out.Overall.UptimePercent != 0 {
 		t.Errorf("all checks failing should be 0%%, got %v", out.Overall.UptimePercent)
 	}
