@@ -45,7 +45,7 @@ func Register(srv *mcp.Server, up *upstream.Client, pingBaseURL string) {
 	addTool(srv, &mcp.Tool{
 		Name:        "get_monitor_metrics",
 		Title:       "Monitor metrics",
-		Description: "Uptime and latency of a website/API monitor over a time range: totals, a per-region breakdown, a time series, the most recent failed checks with their errors, and the range's failure causes (by HTTP status or error class, with counts and regions). Defaults to the last 24 hours.",
+		Description: "Uptime and latency (average, p50, p95, p99, max) of a website/API monitor over a time range: totals, a per-region breakdown, a time series, the most recent failed checks with their errors, and the range's failure causes (by HTTP status or error class, with counts and regions). Defaults to the last 24 hours. The series has at most about 48 points: per minute for ranges up to 48 minutes, per hour up to 48 hours, per day up to 48 days, else per month.",
 		Annotations: readOnly(),
 	}, t.monitorMetrics)
 

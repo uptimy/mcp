@@ -5,41 +5,37 @@ import (
 	"time"
 )
 
-func TestTailStart(t *testing.T) {
-	to := time.Date(2026, 10, 8, 11, 20, 0, 0, time.UTC)
-	from := to.Add(-24 * time.Hour)
-	hour := func(h int) rollup {
-		return rollup{HourBucket: time.Date(2026, 10, 8, h, 0, 0, 0, time.UTC).Format(time.RFC3339)}
-	}
-
+func TestSeriesStepKeepsTheSeriesShort(t *testing.T) {
 	cases := []struct {
-		name  string
-		rows  []rollup
-		daily bool
-		want  time.Time
+		span       time.Duration
+		step, name string
 	}{
-		{"after the newest hour rolled up", []rollup{hour(8), hour(10)}, false, time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC)},
-		{"previous hour not rolled up yet", []rollup{hour(8), hour(9)}, false, time.Date(2026, 10, 8, 10, 0, 0, 0, time.UTC)},
-		{"new monitor: at most three hours", nil, false, to.Add(-maxTail)},
-		{"daily: the current hour", nil, true, time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC)},
+		{30 * time.Minute, "1m", "minute"},
+		{48 * time.Minute, "1m", "minute"},
+		{time.Hour, "1h", "hour"},
+		{24 * time.Hour, "1h", "hour"},
+		{48 * time.Hour, "1h", "hour"},
+		{7 * 24 * time.Hour, "1d", "day"},
+		{30 * 24 * time.Hour, "1d", "day"},
+		{90 * 24 * time.Hour, "1mo", "month"},
 	}
 	for _, c := range cases {
-		if got := tailStart(c.rows, c.daily, from, to); !got.Equal(c.want) {
-			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
+		if step, name := seriesStep(c.span); step != c.step || name != c.name {
+			t.Errorf("%s: got %s (%s), want %s (%s)", c.span, step, name, c.step, c.name)
 		}
-	}
-	if got := tailStart(nil, false, to.Add(-time.Hour), to); !got.Equal(to.Add(-time.Hour)) {
-		t.Errorf("never before the range start: got %s", got)
 	}
 }
 
-func TestNoUptimeWithoutChecks(t *testing.T) {
-	out := summarize(nil, nil)
-	if out.Overall.UptimePercent != nil {
-		t.Errorf("uptime with no checks = %v, want omitted", *out.Overall.UptimePercent)
+func TestNoUptimeOrLatencyWithoutChecks(t *testing.T) {
+	s := figures{}.stats()
+	if s.UptimePercent != nil || s.AvgLatencyMs != nil || s.P95LatencyMs != nil {
+		t.Errorf("no checks = %+v, want uptime and latency omitted", s)
 	}
-	out = summarize([]rollup{{MinuteBucket: "2026-10-08T11:00:00Z", Total: 4, Failures: 4}}, nil)
-	if out.Overall.UptimePercent == nil || *out.Overall.UptimePercent != 0 {
-		t.Errorf("all checks failing should be 0%%, got %v", out.Overall.UptimePercent)
+	s = figures{Checks: 4, Failures: 4}.stats()
+	if s.UptimePercent == nil || *s.UptimePercent != 0 {
+		t.Errorf("all checks failing should be 0%%, got %v", s.UptimePercent)
+	}
+	if s.AvgLatencyMs != nil {
+		t.Errorf("no response times: avg = %v, want omitted", *s.AvgLatencyMs)
 	}
 }
